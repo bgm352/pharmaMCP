@@ -1,5 +1,5 @@
 """
-Pharma MCP/GEO Intelligence Engine v4 - Generic Pharma Auditor
+Pharma MCP/GEO Intelligence Engine - MCP Pharma Auditor
 Audits competitor MCP readiness, generates agent handshake manifests, predicts GEO impact
 """
 
@@ -52,7 +52,7 @@ def fetch_page(url, use_js=False):
             return "", 0
 
 # ------------------------------------------------------------
-# PARSE FUNCTIONS (ORIGINAL + ENHANCED)
+# PARSE FUNCTIONS (ALL ORIGINAL + ENHANCED)
 # ------------------------------------------------------------
 
 def extract_jsonld(html):
@@ -131,172 +131,101 @@ def detect_mcp_signals(html):
 # SCORING MODEL v4 (GEO + MCP + Agentic)
 # ------------------------------------------------------------
 
-def compute_score(types, signals, status):
-    """Base pharma E-E-A-T scoring"""
+def compute_score(types, signals, status, mcp_signals):
+    """Enhanced v4 pharma E-E-A-T + GEO + MCP scoring"""
+    # Schema diversity (max 30)
     schema_diversity = min(len(types) * 3, 30)
-    entity_coverage = 0
-    important_entities = ["Drug", "MedicalCondition", "MedicalWebPage", "FAQPage", "MedicalTrial"]
-    entity_coverage = sum(5 for e in important_entities if e in types)
-    entity_coverage = min(entity_coverage, 20)
     
-    trust = 0
-    trust += 10 if signals["reviewed"] else 0
-    trust += 10 if signals["pi"] else 0
-    trust += 5 if signals["medguide"] else 0
+    # Entity coverage for important pharma entities
+    important_entities = ["DrugClass", "MedicalCondition", "PharmaceuticalProduct", "MedicalScholarlyArticle", 
+                         "MedicalTrial", "MedicalGuideline", "FAQPage"]
+    entity_coverage = sum(1 for t in types if any(ent in t for ent in important_entities)) * 5
     
-    evidence = 0
-    evidence += 10 if signals["pubmed"] else 0
-    evidence += 10 if signals["doi"] else 0
-    evidence += 5 if signals["references"] else 0
+    # E-E-A-T signals (max 40)
+    eat_signals = sum(signals.values()) * 5
     
-    compliance = 10 if signals["adverse"] else 0
-    crawl = 10 if status == 200 else 0
+    # Technical status (max 15)
+    status_score = 15 if status == 200 else 0
     
-    total = schema_diversity + entity_coverage + trust + evidence + compliance + crawl
-    return min(total, 100), {
-        "schema_diversity": schema_diversity,
-        "entity_coverage": entity_coverage,
-        "trust": trust,
-        "evidence": evidence,
-        "compliance": compliance,
-        "crawl": crawl
-    }
-
-def compute_mcp_geo_score(types, signals, mcp_signals, status):
-    """Full MCP/GEO score with agent handshake bonuses"""
-    base_score, base_breakdown = compute_score(types, signals, status)
+    # GEO readiness signals (max 20)
+    geo_score = min(len(types) * 2 + sum(signals[k] for k in ["faq", "references", "pubmed"]), 20)
     
-    # MCP/Agent bonuses
-    mcp_bonus = min(mcp_signals["mcp_manifests"] * 15, 30)
-    agent_bonus = min(mcp_signals["agent_functions"] * 2, 15)
-    webmcp_bonus = 20 if mcp_signals["webmcp_ready"] else 0
+    # MCP/Agentic readiness (max 25)
+    mcp_score = (25 if mcp_signals["webmcp_ready"] else 0) + \
+                mcp_signals["mcp_manifests"] * 5 + \
+                min(mcp_signals["agent_functions"] * 2, 10)
     
-    total = base_score + mcp_bonus + agent_bonus + webmcp_bonus
-    return min(total, 100), {
-        **base_breakdown,
-        "mcp_bonus": mcp_bonus,
-        "agent_bonus": agent_bonus,
-        "webmcp_bonus": webmcp_bonus
-    }
-
-def entity_authority_index(types):
-    """Medical entity authority scoring"""
-    score = 0
-    medical_entities = ["Drug", "MedicalCondition", "MedicalTherapy", "MedicalTrial", "FAQPage"]
-    score += sum(20 for e in medical_entities if e in types)
-    if len(types) > 5:
-        score += 20
-    return min(score, 100)
+    total = schema_diversity + entity_coverage + eat_signals + status_score + geo_score + mcp_score
+    return min(total, 100)
 
 # ------------------------------------------------------------
-# GENERIC PHARMA MCP TOOLS
+# MAIN STREAMLIT APP
 # ------------------------------------------------------------
 
-PHARMA_MCP_TOOLS = {
-    "get_trial_eligibility": {
-        "name": "get_trial_eligibility",
-        "description": "Check patient eligibility for clinical trials by age, condition, location",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "age": {"type": "number"},
-                "condition": {"type": "string"},
-                "zip_code": {"type": "string"}
-            }
-        }
-    },
-    "check_coverage": {
-        "name": "check_coverage",
-        "description": "Verify insurance/pharmacy coverage by NDC, plan, location",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "ndc": {"type": "string"},
-                "insurance_plan": {"type": "string"},
-                "pharmacy_zip": {"type": "string"}
-            }
-        }
-    },
-    "get_dosing_schedule": {
-        "name": "get_dosing_schedule",
-        "description": "Return dosing schedule by patient weight, condition, administration route",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "patient_weight_kg": {"type": "number"},
-                "condition": {"type": "string"}
-            }
-        }
-    },
-    "find_specialists": {
-        "name": "find_specialists",
-        "description": "Locate prescribing specialists by condition, location, insurance",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "condition": {"type": "string"},
-                "zip_code": {"type": "string"},
-                "insurance": {"type": "string"}
-            }
-        }
-    }
-}
-
-def generate_pharma_mcp_manifest(target_urls, brand_name="Pharma Brand"):
-    """Generate generic pharma MCP manifest"""
-    manifest = {
-        "@context": ["https://schema.org", "https://modelcontext.org"],
-        "@type": "MedicalWebPage",
-        "name": f"{brand_name} Agentic MCP Manifest",
-        "mcpTools": list(PHARMA_MCP_TOOLS.values()),
-        "optimizedPages": [
-            {
-                "url": target_urls[i] if i < len(target_urls) else "",
-                "primaryTool": list(PHARMA_MCP_TOOLS.keys())[i % len(PHARMA_MCP_TOOLS)]
-            } for i in range(min(3, len(target_urls)))
-        ],
-        "policy": {
-            "hipaaCompliant": True,
-            "reviewedBy": "Medical Affairs Team",
-            "lastReviewed": "2026-02-23"
-        }
-    }
-    return manifest
-
-def generate_geo_schema(url, tool_name, brand_name="Pharma Brand"):
-    """Generate GEO-optimized schema for specific page"""
-    return {
-        "@context": "https://schema.org",
-        "@type": "MedicalWebPage",
-        "url": url,
-        "name": f"{brand_name} {tool_name.replace('_', ' ').title()}",
-        "reviewedBy": {
-            "@type": "MedicalProfessional",
-            "name": f"{brand_name} Medical Team"
-        },
-        "mcpTool": PHARMA_MCP_TOOLS[tool_name]
-    }
-
-# ------------------------------------------------------------
-# DOWNLOAD PACKAGE
-# ------------------------------------------------------------
-
-def create_download_package(target_urls, brand_name="Pharma Brand"):
-    """Create complete MCP/GEO deployment package"""
-    zip_buffer = io.BytesIO()
+def main():
+    st.set_page_config(page_title="Pharma MCP/GEO Auditor v4", layout="wide")
+    st.title("🔬 Pharma MCP/GEO Intelligence Engine v4")
+    st.markdown("**Generic Pharma Auditor** - Audits competitor MCP readiness, generates agent handshake manifests, predicts GEO impact")
     
-    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-        # Main MCP Manifest
-        manifest = generate_pharma_mcp_manifest(target_urls, brand_name)
-        zip_file.writestr("mcp-manifest.json", json.dumps(manifest, indent=2))
+    # Sidebar
+    st.sidebar.header("Configuration")
+    urls_input = st.sidebar.text_area("Competitor URLs (one per line)", 
+                                     value="https://www.lilly.com/\nhttps://www.pfizer.com/\nhttps://www.merck.com/")
+    max_pages = st.sidebar.slider("Max pages per domain", 1, 10, 3)
+    use_js = st.sidebar.checkbox("Use JavaScript rendering (slower)")
+    
+    if st.sidebar.button("🚀 Run Audit", type="primary"):
+        urls = [u.strip() for u in urls_input.split("\n") if u.strip()]
         
-        # Page-specific schemas
-        for i, url in enumerate(target_urls[:3]):
-            tool_name = list(PHARMA_MCP_TOOLS.keys())[i]
-            schema = generate_geo_schema(url, tool_name, brand_name)
-            zip_file.writestr(f"{tool_name}-schema.json", json.dumps(schema, indent=2))
-        
-        # Deployment guide
-        guide = f"""PHARMA MCP/GEO DEPLOYMENT GUIDE - {brand_name}
+        if urls:
+            progress_bar = st.progress(0)
+            results = []
+            
+            for i, url in enumerate(urls):
+                with st.expander(f"Analyzing {url}"):
+                    html, status = fetch_page(url, use_js)
+                    
+                    jsonld = extract_jsonld(html)
+                    types = flatten_types(jsonld)
+                    signals = extract_signals(html)
+                    mcp_signals = detect_mcp_signals(html)
+                    
+                    score = compute_score(types, signals, status, mcp_signals)
+                    
+                    results.append({
+                        "url": url,
+                        "score": score,
+                        "types": types[:10],  # Top 10
+                        "signals": signals,
+                        "mcp": mcp_signals,
+                        "status": status
+                    })
+                    
+                    st.metric("GEO/MCP Score", f"{score}/100", delta=f"{score-50:+d}")
+                    st.json({"Schema Types": types[:5], "E-E-A-T Signals": signals, "MCP Signals": mcp_signals})
+                
+                progress_bar.progress((i + 1) / len(urls))
+            
+            # Results table
+            df = pd.DataFrame(results)
+            st.subheader("📊 Audit Summary")
+            st.dataframe(df[["url", "score", "status"]].round(1), use_container_width=True)
+            
+            # Leaderboard
+            st.subheader("🏆 Leaderboard")
+            top = df.nlargest(5, "score")[["url", "score"]]
+            st.bar_chart(top.set_index("url")["score"])
+            
+            # Agent handshake manifest generation
+            st.subheader("🤝 Agent Handshake Manifests")
+            for r in results:
+                if r["score"] > 70:
+                    st.code(json.dumps({
+                        "domain": urlparse(r["url"]).netloc,
+                        "mcp_ready": r["mcp"]["webmcp_ready"],
+                        "manifests": r["mcp"]["mcp_manifests"],
+                        "recommended_tools": ["get_pi", "find_trials", "check_coverage"] if r["mcp"]["agent_functions"] > 0 else []
+                    }, indent=2), language="json")
 
-1. Add MCP Manifest to <head> of all pages:
+if __name__ == "__main__":
+    main()
