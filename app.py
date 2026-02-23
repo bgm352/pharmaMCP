@@ -3,12 +3,12 @@ import requests
 import json
 import re
 import pandas as pd
-import matplotlib.pyplot as plt
 import numpy as np
+import matplotlib.pyplot as plt
 from bs4 import BeautifulSoup
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urlparse
 
-# Optional JS rendering
+# Optional Playwright
 USE_PLAYWRIGHT = False
 try:
     from playwright.sync_api import sync_playwright
@@ -16,52 +16,36 @@ try:
 except:
     USE_PLAYWRIGHT = False
 
-
-# ------------------------------------------------------------
-# CONFIG
-# ------------------------------------------------------------
-
-USER_AGENT = "BioGraphMCP/1.0 (+https://example.com)"
+USER_AGENT = "BioGraphMCP/2.0"
 TIMEOUT = 20
 
-
 # ------------------------------------------------------------
-# FETCHING
+# FETCH
 # ------------------------------------------------------------
 
-def fetch_static(url):
-    try:
-        r = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT)
-        return r.text, r.status_code
-    except:
-        return "", 0
-
-
-def fetch_js(url):
-    if not USE_PLAYWRIGHT:
-        return fetch_static(url)
-
-    try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            page = browser.new_page()
-            page.goto(url, timeout=20000)
-            page.wait_for_load_state("networkidle")
-            html = page.content()
-            browser.close()
-            return html, 200
-    except:
-        return "", 0
-
-
-def safe_url(domain):
-    if domain.startswith("http"):
-        return domain
-    return f"https://{domain}/"
+def fetch_page(url, use_js=False):
+    if use_js and USE_PLAYWRIGHT:
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True)
+                page = browser.new_page()
+                page.goto(url, timeout=20000)
+                page.wait_for_load_state("networkidle")
+                html = page.content()
+                browser.close()
+                return html, 200
+        except:
+            return "", 0
+    else:
+        try:
+            r = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT)
+            return r.text, r.status_code
+        except:
+            return "", 0
 
 
 # ------------------------------------------------------------
-# PARSING
+# PARSE
 # ------------------------------------------------------------
 
 def extract_jsonld(html):
@@ -77,7 +61,7 @@ def extract_jsonld(html):
     return data
 
 
-def flatten_schema_types(jsonld):
+def flatten_types(jsonld):
     types = set()
 
     def walk(node):
@@ -93,204 +77,184 @@ def flatten_schema_types(jsonld):
             for x in node:
                 walk(x)
 
-    for item in jsonld:
-        walk(item)
-
+    for j in jsonld:
+        walk(j)
     return list(types)
 
 
 def extract_signals(html):
     text = html.lower()
     return {
-        "has_pi": "prescribing information" in text,
-        "has_medguide": "medication guide" in text,
-        "has_adverse": "adverse" in text or "side effects" in text,
-        "has_pubmed": "pubmed" in text,
-        "has_doi": bool(re.search(r"\b10\.\d{4,9}/", text)),
-        "has_reviewed": "reviewed by" in text or "medically reviewed" in text,
-        "has_references": "references" in text,
+        "reviewed": "reviewed by" in text or "medically reviewed" in text,
+        "pi": "prescribing information" in text,
+        "medguide": "medication guide" in text,
+        "adverse": "adverse" in text,
+        "pubmed": "pubmed" in text,
+        "doi": bool(re.search(r"\b10\.\d{4,9}/", text)),
+        "references": "references" in text,
+        "faq": "faq" in text,
     }
 
 
 # ------------------------------------------------------------
-# SCORING
+# SCORING MODEL V2
 # ------------------------------------------------------------
 
-def score_domain(schema_types, signals, status_ok):
+def compute_score(types, signals, status):
 
-    structured = min(len(schema_types) * 5, 30)
+    schema_diversity = min(len(types) * 3, 30)
+
+    entity_coverage = 0
+    important_entities = ["Drug", "MedicalCondition", "MedicalWebPage", "FAQPage"]
+    entity_coverage = sum(5 for e in important_entities if e in types)
+    entity_coverage = min(entity_coverage, 20)
 
     trust = 0
-    trust += 10 if signals["has_reviewed"] else 0
-    trust += 10 if signals["has_pi"] else 0
-    trust += 10 if signals["has_medguide"] else 0
+    trust += 10 if signals["reviewed"] else 0
+    trust += 10 if signals["pi"] else 0
+    trust += 5 if signals["medguide"] else 0
 
     evidence = 0
-    evidence += 10 if signals["has_pubmed"] else 0
-    evidence += 10 if signals["has_doi"] else 0
-    evidence += 10 if signals["has_references"] else 0
+    evidence += 10 if signals["pubmed"] else 0
+    evidence += 10 if signals["doi"] else 0
+    evidence += 5 if signals["references"] else 0
 
-    compliance = 10 if signals["has_adverse"] else 0
-    crawl = 10 if status_ok else 0
+    compliance = 10 if signals["adverse"] else 0
+    crawl = 10 if status == 200 else 0
 
-    overall = structured + trust + evidence + compliance + crawl
-    return min(overall, 100)
-
-
-# ------------------------------------------------------------
-# RADAR CHART
-# ------------------------------------------------------------
-
-def radar_chart(row):
-    categories = ["structured", "trust", "evidence", "compliance", "crawl"]
-    values = [
-        row["structured"],
-        row["trust"],
-        row["evidence"],
-        row["compliance"],
-        row["crawl"],
-    ]
-
-    values += values[:1]
-    angles = np.linspace(0, 2 * np.pi, len(categories), endpoint=False).tolist()
-    angles += angles[:1]
-
-    fig = plt.figure()
-    ax = fig.add_subplot(111, polar=True)
-    ax.plot(angles, values)
-    ax.fill(angles, values, alpha=0.2)
-    ax.set_xticks(angles[:-1])
-    ax.set_xticklabels(categories)
-    return fig
-
-
-# ------------------------------------------------------------
-# MCP MANIFEST
-# ------------------------------------------------------------
-
-def generate_manifest(site_name, base_url, urls):
-    return {
-        "@context": "https://schema.org",
-        "@type": "WebSite",
-        "name": site_name,
-        "url": base_url,
-        "hasPart": [
-            {
-                "@type": "MedicalWebPage",
-                "url": u,
-                "about": {"@type": "Drug", "name": "Xolair"},
-            }
-            for u in urls
-        ],
+    total = schema_diversity + entity_coverage + trust + evidence + compliance + crawl
+    return min(total, 100), {
+        "schema_diversity": schema_diversity,
+        "entity_coverage": entity_coverage,
+        "trust": trust,
+        "evidence": evidence,
+        "compliance": compliance,
+        "crawl": crawl
     }
 
 
 # ------------------------------------------------------------
-# PAGE OPTIMIZATION
+# ENTITY AUTHORITY INDEX
 # ------------------------------------------------------------
 
-def generate_page_schema(url):
-
-    condition = "Allergic Disease"
-    if "asthma" in url:
-        condition = "Allergic Asthma"
-    elif "hives" in url:
-        condition = "Chronic Spontaneous Urticaria"
-    elif "food" in url:
-        condition = "IgE-mediated Food Allergy"
-
-    return {
-        "@context": "https://schema.org",
-        "@graph": [
-            {
-                "@type": "MedicalWebPage",
-                "url": url,
-                "mainEntity": {
-                    "@type": "MedicalCondition",
-                    "name": condition,
-                },
-            },
-            {
-                "@type": "Drug",
-                "name": "Xolair",
-                "nonproprietaryName": "omalizumab",
-            },
-        ],
-    }
+def entity_authority_index(types):
+    score = 0
+    if "Drug" in types:
+        score += 20
+    if "MedicalCondition" in types:
+        score += 20
+    if "MedicalTherapy" in types:
+        score += 20
+    if "FAQPage" in types:
+        score += 20
+    if len(types) > 5:
+        score += 20
+    return score
 
 
 # ------------------------------------------------------------
-# STREAMLIT UI
+# AI OVERVIEW SIMULATION
 # ------------------------------------------------------------
 
-st.set_page_config(page_title="BioGraph MCP", layout="wide")
+def simulate_ai_summary(domain, types):
+    if "Drug" in types and "MedicalCondition" in types:
+        return f"{domain} is structured with explicit drug and condition entities, increasing likelihood of AI citation."
+    return f"{domain} lacks full medical entity modeling and may be summarized generically by AI systems."
 
-st.title("BioGraph MCP – Pharma SEO/GEO Intelligence Engine")
+
+# ------------------------------------------------------------
+# IDEAL OUTPUT NOTES
+# ------------------------------------------------------------
+
+def ideal_output_notes(score):
+    if score >= 80:
+        return "High MCP readiness. Likely strong AI visibility. Focus on competitive comparison schema."
+    elif score >= 60:
+        return "Moderate readiness. Improve citations, reviewedBy, and FAQ modeling."
+    elif score >= 40:
+        return "Weak medical structuring. Add MedicalCondition + Drug graph modeling."
+    else:
+        return "Low MCP readiness. Requires structured schema overhaul."
+
+
+# ------------------------------------------------------------
+# STREAMLIT APP
+# ------------------------------------------------------------
+
+st.set_page_config(layout="wide")
+st.title("BioGraph MCP – Pharma SEO/GEO Intelligence Engine v2")
 
 with st.sidebar:
-    st.header("Inputs")
-
-    competitors_input = st.text_area(
-        "Competitor Domains",
-        value="nucala.com\ndupixent.com\nfasenra.com\ntezspire.com\ncinqaero.com",
-        height=150,
-    )
+    domains_input = st.text_area("Competitor Domains",
+                                 value="nucala.com\ndupixent.com\nfasenra.com\ntezspire.com\ncinqaero.com")
 
     target1 = st.text_input("Target URL 1")
     target2 = st.text_input("Target URL 2")
     target3 = st.text_input("Target URL 3")
 
     use_js = st.checkbox("Enable JS Rendering (Playwright)", value=False)
-
-    run = st.button("Run MCP Audit")
+    run = st.button("Run Full MCP Analysis")
 
 if run:
-
-    competitors = [c.strip() for c in competitors_input.split("\n") if c.strip()]
+    domains = [d.strip() for d in domains_input.split("\n") if d.strip()]
     results = []
 
-    for domain in competitors:
-        url = safe_url(domain)
-        html, status = fetch_js(url) if use_js else fetch_static(url)
+    for domain in domains:
+        url = domain if domain.startswith("http") else f"https://{domain}"
+        html, status = fetch_page(url, use_js)
 
         jsonld = extract_jsonld(html)
-        schema_types = flatten_schema_types(jsonld)
+        types = flatten_types(jsonld)
         signals = extract_signals(html)
 
-        overall = score_domain(schema_types, signals, status == 200)
+        score, breakdown = compute_score(types, signals, status)
+        eai = entity_authority_index(types)
 
         results.append({
             "domain": domain,
-            "overall": overall,
-            "structured": min(len(schema_types) * 5, 30),
-            "trust": 30 if signals["has_reviewed"] else 0,
-            "evidence": 30 if signals["has_pubmed"] else 0,
-            "compliance": 10 if signals["has_adverse"] else 0,
-            "crawl": 10 if status == 200 else 0,
-            "schema_types": ", ".join(schema_types),
+            "MCP Score": score,
+            "Entity Authority Index": eai,
+            "Schema Types": ", ".join(types),
+            "AI Simulation": simulate_ai_summary(domain, types),
+            "Ideal Recommendation": ideal_output_notes(score),
+            **breakdown
         })
 
     df = pd.DataFrame(results)
-    st.subheader("Competitor MCP Scorecard")
+    st.subheader("MCP Competitor Scorecard")
     st.dataframe(df)
 
+    st.download_button("Download CSV", df.to_csv(index=False), "mcp_scorecard.csv")
+
+    # Radar
     if not df.empty:
-        st.subheader("Radar Visualization")
-        st.pyplot(radar_chart(results[0]))
+        row = df.iloc[0]
+        categories = ["schema_diversity", "entity_coverage", "trust", "evidence", "compliance", "crawl"]
+        values = [row[c] for c in categories]
+        values += values[:1]
+        angles = np.linspace(0, 2 * np.pi, len(categories), endpoint=False).tolist()
+        angles += angles[:1]
+
+        fig = plt.figure()
+        ax = fig.add_subplot(111, polar=True)
+        ax.plot(angles, values)
+        ax.fill(angles, values, alpha=0.3)
+        ax.set_xticks(angles[:-1])
+        ax.set_xticklabels(categories)
+        st.pyplot(fig)
 
     # Manifest
     st.subheader("Generated MCP Manifest")
-    manifest = generate_manifest("Xolair", "https://www.xolair.com", [target1, target2, target3])
+    manifest = {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "Xolair",
+        "hasPart": [target1, target2, target3]
+    }
     st.code(json.dumps(manifest, indent=2), language="json")
 
-    # Page Schemas
-    st.subheader("Agent Handshake Schema")
-    for t in [target1, target2, target3]:
-        if t:
-            schema = generate_page_schema(t)
-            st.markdown(f"### {t}")
-            st.code(json.dumps(schema, indent=2), language="json")
+    st.subheader("Executive Summary")
+    avg_score = df["MCP Score"].mean()
+    st.write(f"Average competitor MCP readiness: {round(avg_score,1)} / 100")
+    st.write("Higher structural authority increases likelihood of generative citation and AI overview inclusion.")
 
-    # Export
-    st.download_button("Download Scorecard CSV", df.to_csv(index=False), "mcp_scorecard.csv")
-    st.download_button("Download Manifest JSON", json.dumps(manifest, indent=2), "mcp_manifest.json")
