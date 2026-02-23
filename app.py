@@ -1,6 +1,5 @@
 """
 Pharma MCP Agent Readiness Auditor
-XO Digital | 2026
 
 The question this app answers:
   "Can an AI agent actually USE this pharma website as an MCP tool?"
@@ -857,7 +856,6 @@ def build_pdf(results: list[AuditResult], client: str) -> bytes:
     meta = Table([[
         Paragraph(f"Generated: {datetime.now().strftime('%d %b %Y %H:%M')}", s(8, col=C_DIM)),
         Paragraph(f"Domains: {len(results)}", s(8, col=C_DIM, align=TA_CENTER)),
-        Paragraph("XO Digital · AI-First 2026", s(8, col=C_DIM, align=TA_RIGHT)),
     ]], colWidths=[W/3]*3)
     meta.setStyle(TableStyle([
         ("BACKGROUND",(0,0),(-1,-1),C_SURF),
@@ -1011,7 +1009,6 @@ FRIENDLY_PATHS = {
 def render_hero():
     st.markdown("""
     <div class="hero">
-        <div class="hero-pill">🔬 XO Digital · MCP Readiness Platform</div>
         <div class="hero-title">Pharma <em>MCP Agent</em> Readiness Auditor</div>
         <div class="hero-sub">
             Actively probes pharma websites to check whether AI agents can call them as live MCP tools —
