@@ -41,345 +41,198 @@ try:
 except ImportError:
     REPORTLAB_AVAILABLE = False
 
-# ============================================================================
-# PAGE CONFIG
-# ============================================================================
 
 st.set_page_config(
     page_title="Pharma MCP Auditor",
-    page_icon="⚡",
+    page_icon="🔬",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
 
-# ============================================================================
-# CSS — Terminal / Protocol aesthetic
-# Monochrome green-on-black. Amber for warnings. Red for failures.
-# Feels like an agent runtime, not a marketing dashboard.
-# ============================================================================
-
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap');
 
 :root {
-    --bg:         #080b08;
-    --bg2:        #0d110d;
-    --surface:    #111611;
-    --surface2:   #161e16;
-    --border:     #1e2b1e;
-    --border-lit: #243024;
-
-    --green:      #4ade80;
-    --green-dim:  rgba(74,222,128,0.08);
-    --green-glow: rgba(74,222,128,0.2);
-    --green-bdr:  rgba(74,222,128,0.25);
-
-    --amber:      #fbbf24;
-    --amber-dim:  rgba(251,191,36,0.08);
-    --amber-bdr:  rgba(251,191,36,0.3);
-
-    --red:        #f87171;
-    --red-dim:    rgba(248,113,113,0.08);
-    --red-bdr:    rgba(248,113,113,0.3);
-
-    --cyan:       #67e8f9;
-    --cyan-dim:   rgba(103,232,249,0.08);
-    --cyan-bdr:   rgba(103,232,249,0.25);
-
-    --text:       #e2ffe2;
-    --text-mid:   #8aaa8a;
-    --text-dim:   #3d573d;
-
-    --mono: 'IBM Plex Mono', monospace;
-    --sans: 'IBM Plex Sans', sans-serif;
-
-    --r: 6px;
-    --r-lg: 10px;
+    --bg:          #0f1117;
+    --surface:     #181c2a;
+    --surface2:    #1f2438;
+    --surface3:    #272c42;
+    --border:      #2d3348;
+    --border-lit:  #3a4060;
+    --text:        #edf0fa;
+    --text-mid:    #8891b0;
+    --text-dim:    #4a5270;
+    --blue:        #4f8ef7;
+    --blue-dim:    rgba(79,142,247,0.13);
+    --blue-bdr:    rgba(79,142,247,0.35);
+    --green:       #34d399;
+    --green-dim:   rgba(52,211,153,0.12);
+    --green-bdr:   rgba(52,211,153,0.35);
+    --amber:       #f59e0b;
+    --amber-dim:   rgba(245,158,11,0.12);
+    --amber-bdr:   rgba(245,158,11,0.35);
+    --red:         #f87171;
+    --red-dim:     rgba(248,113,113,0.12);
+    --red-bdr:     rgba(248,113,113,0.35);
+    --purple:      #a78bfa;
+    --purple-dim:  rgba(167,139,250,0.12);
+    --purple-bdr:  rgba(167,139,250,0.35);
+    --teal:        #2dd4bf;
+    --teal-dim:    rgba(45,212,191,0.12);
+    --teal-bdr:    rgba(45,212,191,0.35);
+    --sans: 'Plus Jakarta Sans', sans-serif;
+    --mono: 'Fira Code', monospace;
+    --r: 10px; --r-lg: 16px; --r-sm: 6px;
 }
+html, body, [class*="css"] { font-family: var(--sans) !important; background: var(--bg) !important; color: var(--text) !important; }
+.main .block-container { padding: 0 2.2rem 5rem !important; max-width: 1400px !important; }
 
-html, body, [class*="css"] {
-    font-family: var(--sans) !important;
-    background: var(--bg) !important;
-    color: var(--text) !important;
-}
-.main .block-container { padding: 0 2rem 5rem !important; max-width: 1360px !important; }
+/* Hero */
+.hero { background: linear-gradient(140deg,#141829 0%,#181e34 55%,#121726 100%); border-bottom: 1px solid var(--border); padding: 2.2rem 2.6rem 2rem; margin: 0 -2.2rem 2rem; position: relative; overflow: hidden; }
+.hero::after { content: ''; position: absolute; top: -60px; right: -60px; width: 380px; height: 380px; background: radial-gradient(circle,rgba(79,142,247,0.07) 0%,transparent 65%); pointer-events: none; }
+.hero-pill { display: inline-flex; align-items: center; gap: 0.4rem; background: var(--blue-dim); border: 1px solid var(--blue-bdr); border-radius: 20px; padding: 0.22rem 0.8rem; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--blue); margin-bottom: 0.9rem; }
+.hero-title { font-size: 2.1rem; font-weight: 800; letter-spacing: -0.025em; color: var(--text); margin: 0 0 0.45rem; line-height: 1.15; }
+.hero-title em { color: var(--blue); font-style: normal; }
+.hero-sub { font-size: 0.95rem; color: var(--text-mid); margin: 0 0 1.4rem; max-width: 620px; line-height: 1.65; }
+.fp-row { display: flex; gap: 0.45rem; flex-wrap: wrap; }
+.fp { font-size: 0.72rem; font-weight: 600; padding: 0.22rem 0.75rem; border-radius: 20px; background: var(--surface2); border: 1px solid var(--border); color: var(--text-mid); }
+.fp.on { color: var(--green); border-color: var(--green-bdr); background: var(--green-dim); }
 
-/* ── Scanlines overlay ── */
-.main::before {
-    content: '';
-    position: fixed; inset: 0;
-    background: repeating-linear-gradient(
-        0deg, transparent, transparent 2px,
-        rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px
-    );
-    pointer-events: none; z-index: 0;
-}
+/* Section heading */
+.sec-h { display: flex; align-items: center; gap: 0.6rem; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.9rem; }
+.sec-h::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 
-/* ── Header bar ── */
-.header-bar {
-    background: var(--bg2);
-    border-bottom: 1px solid var(--border);
-    padding: 1.4rem 2rem 1.2rem;
-    margin: 0 -2rem 2rem;
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 2rem;
-}
-.header-logo {
-    font-family: var(--mono);
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: var(--green);
-    letter-spacing: 0.04em;
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-}
-.header-logo::before {
-    content: '▶';
-    font-size: 0.7rem;
-    animation: blink 1.4s step-end infinite;
-}
-@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
-.header-tagline {
-    font-family: var(--mono);
-    font-size: 0.7rem;
-    color: var(--text-dim);
-    letter-spacing: 0.06em;
-}
-.header-right {
-    font-family: var(--mono);
-    font-size: 0.65rem;
-    color: var(--text-dim);
-    text-align: right;
-    line-height: 1.8;
-}
-.header-right span { color: var(--green); }
+/* Pillar cards */
+.pc { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 1rem 1.1rem; position: relative; overflow: hidden; }
+.pc::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; border-radius: var(--r) var(--r) 0 0; }
+.pc-b::before { background: var(--blue); }
+.pc-t::before { background: var(--teal); }
+.pc-g::before { background: var(--green); }
+.pc-a::before { background: var(--amber); }
+.pc-p::before { background: var(--purple); }
+.pc-icon { font-size: 1.25rem; margin-bottom: 0.35rem; }
+.pc-name { font-size: 0.65rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.45rem; }
+.pc-score { font-size: 1.65rem; font-weight: 800; line-height: 1; margin-bottom: 0.45rem; }
+.pc-denom { font-size: 0.82rem; font-weight: 400; color: var(--text-dim); }
+.pc-bar { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin-bottom: 0.3rem; }
+.pc-fill { height: 100%; border-radius: 2px; }
+.pf-b { background: var(--blue); } .pf-t { background: var(--teal); } .pf-g { background: var(--green); } .pf-a { background: var(--amber); } .pf-p { background: var(--purple); }
+.pc-desc { font-size: 0.68rem; color: var(--text-dim); line-height: 1.4; }
 
-/* ── Section label ── */
-.slabel {
-    font-family: var(--mono);
-    font-size: 0.62rem;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--text-dim);
-    margin: 0 0 0.8rem;
-    padding-bottom: 0.4rem;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-.slabel::before { content: '//'; color: var(--green); font-size: 0.7rem; }
+/* Verdict badge */
+.verdict { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.28rem 0.85rem; border-radius: 20px; font-size: 0.78rem; font-weight: 700; }
+.vg { background: var(--green-dim); color: var(--green); border: 1px solid var(--green-bdr); }
+.va { background: var(--amber-dim); color: var(--amber); border: 1px solid var(--amber-bdr); }
+.vr { background: var(--red-dim);   color: var(--red);   border: 1px solid var(--red-bdr); }
 
-/* ── Protocol check pillars ── */
-.pillar-grid { display: grid; grid-template-columns: repeat(5,1fr); gap: 0.6rem; }
-.pillar {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--r);
-    padding: 0.9rem 1rem;
-    position: relative;
-    overflow: hidden;
-}
-.pillar::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 2px;
-}
-.pillar-g::before { background: var(--green); }
-.pillar-a::before { background: var(--amber); }
-.pillar-r::before { background: var(--red); }
-.pillar-c::before { background: var(--cyan); }
-.pillar-label {
-    font-family: var(--mono);
-    font-size: 0.58rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--text-dim);
-    margin-bottom: 0.5rem;
-}
-.pillar-val {
-    font-family: var(--mono);
-    font-size: 1.5rem;
-    font-weight: 600;
-    line-height: 1;
-    margin-bottom: 0.35rem;
-}
-.pillar-max { font-size: 0.75rem; font-weight: 300; color: var(--text-dim); }
-.bar-track { width:100%; height:3px; background:var(--border); border-radius:2px; margin-bottom:0.2rem; overflow:hidden; }
-.bar-fill  { height:100%; border-radius:2px; }
-.bf-g { background: var(--green); }
-.bf-a { background: var(--amber); }
-.bf-r { background: var(--red); }
-.bf-c { background: var(--cyan); }
-.pillar-pct { font-family:var(--mono); font-size:0.55rem; color:var(--text-dim); }
+/* Score ring */
+.sr { width: 72px; height: 72px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: 800; font-size: 1.3rem; line-height: 1; border: 3px solid; flex-shrink: 0; }
+.sr-g { color: var(--green); border-color: var(--green); background: var(--green-dim); }
+.sr-a { color: var(--amber); border-color: var(--amber); background: var(--amber-dim); }
+.sr-r { color: var(--red);   border-color: var(--red);   background: var(--red-dim); }
+.sr-sub { font-size: 0.46rem; opacity: 0.6; margin-top: 2px; font-weight: 400; }
 
-/* ── Result card ── */
-.rcard {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--r-lg);
-    margin-bottom: 0.75rem;
-    overflow: hidden;
-}
-.rcard:hover { border-color: var(--border-lit); }
+/* Check items */
+.checks { display: flex; flex-direction: column; gap: 0.28rem; }
+.chk { display: flex; align-items: center; gap: 0.6rem; padding: 0.42rem 0.65rem; border-radius: var(--r-sm); font-size: 0.82rem; }
+.chk-pass { background: var(--green-dim); color: var(--text); }
+.chk-fail { background: var(--surface2);  color: var(--text-dim); }
+.chk-icon { font-size: 0.82rem; flex-shrink: 0; }
 
-/* ── Score badge ── */
-.score-badge {
-    display: inline-flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    width: 64px; height: 64px;
-    border-radius: 50%;
-    border: 2px solid;
-    font-family: var(--mono);
-    font-weight: 600;
-    font-size: 1.2rem;
-    line-height: 1;
-    flex-shrink: 0;
-}
-.sb-g { color:var(--green); border-color:var(--green); background:var(--green-dim); }
-.sb-a { color:var(--amber); border-color:var(--amber); background:var(--amber-dim); }
-.sb-r { color:var(--red);   border-color:var(--red);   background:var(--red-dim); }
-.sb-sub { font-size:0.45rem; opacity:0.6; margin-top:2px; }
+/* Probe results */
+.probe-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.28rem; }
+.probe { display: flex; align-items: center; gap: 0.45rem; padding: 0.38rem 0.55rem; border-radius: var(--r-sm); font-family: var(--mono); font-size: 0.66rem; }
+.probe-y { background: var(--green-dim); color: var(--green); }
+.probe-n { background: var(--surface2);  color: var(--text-dim); }
 
-/* ── Tags ── */
-.tags { display:flex; gap:0.35rem; flex-wrap:wrap; margin-top:0.35rem; }
-.tag {
-    font-family: var(--mono);
-    font-size: 0.58rem;
-    font-weight: 500;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    padding: 0.12rem 0.5rem;
-    border-radius: 3px;
-    border: 1px solid;
-}
-.tag-g   { color:var(--green); border-color:var(--green-bdr); background:var(--green-dim); }
-.tag-a   { color:var(--amber); border-color:var(--amber-bdr); background:var(--amber-dim); }
-.tag-r   { color:var(--red);   border-color:var(--red-bdr);   background:var(--red-dim); }
-.tag-c   { color:var(--cyan);  border-color:var(--cyan-bdr);  background:var(--cyan-dim); }
-.tag-dim { color:var(--text-dim); border-color:var(--border); background:var(--surface2); }
-.tag-cache { color:var(--text-mid); border-color:var(--border); background:var(--surface2); }
+/* Fix list */
+.fixes { display: flex; flex-direction: column; gap: 0.35rem; }
+.fix { display: flex; align-items: flex-start; gap: 0.55rem; padding: 0.55rem 0.75rem; background: var(--amber-dim); border: 1px solid var(--amber-bdr); border-radius: var(--r-sm); font-size: 0.82rem; color: var(--text); }
+.fix-n { font-family: var(--mono); font-size: 0.62rem; font-weight: 600; background: var(--amber-dim); color: var(--amber); border: 1px solid var(--amber-bdr); padding: 0.08rem 0.35rem; border-radius: 3px; flex-shrink: 0; margin-top: 1px; }
+.fix-pts { font-family: var(--mono); font-size: 0.62rem; color: var(--amber); padding: 0.08rem 0.32rem; border-radius: 3px; background: var(--amber-dim); border: 1px solid var(--amber-bdr); flex-shrink: 0; white-space: nowrap; margin-left: auto; }
+.fix-ok { background: var(--green-dim); border: 1px solid var(--green-bdr); border-radius: var(--r-sm); padding: 0.6rem 0.85rem; font-size: 0.85rem; color: var(--green); display: flex; align-items: center; gap: 0.5rem; }
 
-/* ── Signal checklist ── */
-.check-grid { display:grid; grid-template-columns:1fr 1fr; gap:0.3rem; }
-.check-row  { display:flex; align-items:center; gap:0.5rem; font-family:var(--mono); font-size:0.72rem; }
-.chk-on  { color:var(--green); }
-.chk-off { color:var(--text-dim); }
-.check-row.on  { color: var(--text); }
-.check-row.off { color: var(--text-dim); }
+/* AI recommendation box */
+.ai-box { background: linear-gradient(135deg,var(--blue-dim),var(--purple-dim)); border: 1px solid var(--blue-bdr); border-radius: var(--r); padding: 1.1rem 1.3rem; }
+.ai-lbl { font-size: 0.65rem; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; color: var(--blue); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem; }
+.ai-body { font-size: 0.88rem; color: var(--text); line-height: 1.75; white-space: pre-wrap; }
 
-/* ── Fix items ── */
-.fix-stack { display:flex; flex-direction:column; gap:0.35rem; }
-.fix-row {
-    display:flex; align-items:center; justify-content:space-between;
-    background: var(--amber-dim);
-    border: 1px solid var(--amber-bdr);
-    border-radius: var(--r);
-    padding: 0.4rem 0.7rem;
-    font-family: var(--mono);
-    font-size: 0.72rem;
-    color: var(--amber);
-}
-.fix-pts { background:rgba(251,191,36,0.15); padding:0.1rem 0.35rem; border-radius:3px; font-weight:600; }
-.no-fixes { background:var(--green-dim); border:1px solid var(--green-bdr); border-radius:var(--r); padding:0.5rem 0.7rem; font-family:var(--mono); font-size:0.72rem; color:var(--green); }
+/* KPI grid */
+.kpi-grid { display: grid; grid-template-columns: repeat(5,1fr); gap: 0.65rem; margin-bottom: 1.5rem; }
+.kpi-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 1.1rem 1.2rem; }
+.kpi-icon { font-size: 1.5rem; margin-bottom: 0.35rem; }
+.kpi-lbl  { font-size: 0.65rem; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.3rem; }
+.kpi-val  { font-size: 2.1rem; font-weight: 800; line-height: 1; color: var(--text); }
+.kpi-sub  { font-size: 0.7rem; color: var(--text-dim); margin-top: 0.2rem; }
+.kg { color: var(--green) !important; } .ka { color: var(--amber) !important; } .kr { color: var(--red) !important; }
 
-/* ── AI rec box ── */
-.ai-box {
-    background: linear-gradient(135deg, rgba(74,222,128,0.04), rgba(103,232,249,0.04));
-    border: 1px solid var(--green-bdr);
-    border-radius: var(--r);
-    padding: 0.9rem 1.1rem;
-}
-.ai-box-header { font-family:var(--mono); font-size:0.6rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--green); margin-bottom:0.5rem; }
-.ai-box-body   { font-family:var(--sans); font-size:0.83rem; color:var(--text); line-height:1.7; white-space:pre-wrap; }
+/* Schema chips */
+.chips { display: flex; flex-wrap: wrap; gap: 0.28rem; margin-top: 0.4rem; }
+.chip { font-family: var(--mono); font-size: 0.6rem; background: var(--surface3); border: 1px solid var(--border); color: var(--purple); padding: 0.12rem 0.48rem; border-radius: 3px; }
 
-/* ── KPI bar ── */
-.kpi-row { display:grid; grid-template-columns:repeat(5,1fr); gap:0.6rem; margin-bottom:1.4rem; }
-.kpi { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); padding:1rem 1.1rem; }
-.kpi-label { font-family:var(--mono); font-size:0.58rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-dim); margin-bottom:0.4rem; }
-.kpi-val   { font-family:var(--mono); font-size:1.9rem; font-weight:600; line-height:1; color:var(--text); }
-.kpi-sub   { font-family:var(--mono); font-size:0.58rem; color:var(--text-dim); margin-top:0.2rem; }
-.kpi-g { color:var(--green) !important; }
-.kpi-a { color:var(--amber) !important; }
-.kpi-r { color:var(--red) !important; }
+/* Compare */
+.cmp-card { text-align: center; padding: 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); border-top: 3px solid; }
+.cmp-lbl  { font-size: 0.78rem; font-weight: 600; color: var(--text-mid); padding-top: 0.4rem; }
+.cmp-cell { text-align: center; padding: 0.45rem; border-radius: var(--r-sm); font-size: 0.9rem; font-weight: 600; border: 1px solid; }
+.cmp-w { background: var(--green-dim); color: var(--green); border-color: var(--green-bdr); }
+.cmp-l { background: var(--surface2);  color: var(--text-dim); border-color: var(--border); }
 
-/* ── Compare ── */
-.cmp-winner { color:var(--green) !important; border-color:var(--green-bdr) !important; background:var(--green-dim) !important; font-weight:600 !important; }
-.cmp-loser  { color:var(--text-dim) !important; }
+/* Benchmarks */
+.bench-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 1.3rem 1.5rem; }
+.bench-row  { display: flex; align-items: center; gap: 0.9rem; padding: 0.55rem 0; border-bottom: 1px solid var(--border); }
+.bench-row:last-child { border-bottom: none; }
+.bench-name  { font-size: 0.88rem; font-weight: 700; color: var(--text); width: 115px; flex-shrink: 0; }
+.bench-cat   { font-size: 0.68rem; color: var(--text-dim); width: 70px; flex-shrink: 0; }
+.bench-track { flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+.bench-fill  { height: 100%; border-radius: 4px; }
+.bench-score { font-family: var(--mono); font-size: 0.85rem; font-weight: 600; width: 30px; text-align: right; flex-shrink: 0; }
 
-/* ── Benchmark ── */
-.bench-row { display:flex; align-items:center; gap:0.8rem; padding:0.5rem 0; border-bottom:1px solid var(--border); }
-.bench-row:last-child { border-bottom:none; }
-.bench-name  { font-family:var(--mono); font-size:0.78rem; font-weight:500; color:var(--text); width:110px; flex-shrink:0; }
-.bench-cat   { font-family:var(--mono); font-size:0.58rem; color:var(--text-dim); width:75px; flex-shrink:0; }
-.bench-track { flex:1; height:6px; background:var(--border); border-radius:3px; overflow:hidden; }
-.bench-fill  { height:100%; border-radius:3px; background:var(--green); opacity:0.7; }
-.bench-score { font-family:var(--mono); font-size:0.78rem; font-weight:600; color:var(--green); width:32px; text-align:right; flex-shrink:0; }
+/* Tabs */
+.stTabs [data-baseweb="tab-list"] { background: transparent !important; border-bottom: 1px solid var(--border) !important; gap: 0 !important; }
+.stTabs [data-baseweb="tab"] { font-family: var(--sans) !important; font-size: 0.88rem !important; font-weight: 700 !important; color: var(--text-dim) !important; background: transparent !important; border: none !important; border-bottom: 2px solid transparent !important; padding: 0.72rem 1.3rem !important; }
+.stTabs [data-baseweb="tab"]:hover { color: var(--text-mid) !important; }
+.stTabs [aria-selected="true"] { color: var(--blue) !important; border-bottom-color: var(--blue) !important; }
+.stTabs [data-baseweb="tab-panel"] { padding: 1.5rem 0 0 !important; }
 
-/* ── Tabs ── */
-.stTabs [data-baseweb="tab-list"] { background:transparent !important; border-bottom:1px solid var(--border) !important; gap:0 !important; padding:0 !important; }
-.stTabs [data-baseweb="tab"] { font-family:var(--mono) !important; font-size:0.75rem !important; font-weight:400 !important; color:var(--text-dim) !important; background:transparent !important; border:none !important; border-bottom:2px solid transparent !important; padding:0.7rem 1.2rem !important; letter-spacing:0.04em !important; text-transform:uppercase !important; }
-.stTabs [data-baseweb="tab"]:hover { color:var(--text-mid) !important; }
-.stTabs [aria-selected="true"] { color:var(--green) !important; border-bottom-color:var(--green) !important; }
-.stTabs [data-baseweb="tab-panel"] { padding:1.4rem 0 0 !important; }
+/* Buttons */
+.stButton > button { font-family: var(--sans) !important; font-weight: 700 !important; font-size: 0.88rem !important; border-radius: var(--r-sm) !important; border: none !important; background: var(--blue) !important; color: #fff !important; padding: 0.6rem 1.4rem !important; box-shadow: 0 4px 14px rgba(79,142,247,0.3) !important; transition: all 0.15s !important; }
+.stButton > button:hover { opacity: 0.88 !important; transform: translateY(-1px) !important; }
 
-/* ── Buttons ── */
-.stButton > button { font-family:var(--mono) !important; font-size:0.78rem !important; font-weight:500 !important; letter-spacing:0.06em !important; text-transform:uppercase !important; background:var(--green-dim) !important; border:1px solid var(--green-bdr) !important; color:var(--green) !important; border-radius:var(--r) !important; padding:0.55rem 1.2rem !important; transition:all 0.15s !important; box-shadow:none !important; }
-.stButton > button:hover { background:rgba(74,222,128,0.15) !important; box-shadow:0 0 12px var(--green-glow) !important; }
+/* Inputs */
+.stTextInput > div > div > input, .stTextArea > div > div > textarea { background: var(--surface2) !important; border: 1px solid var(--border) !important; color: var(--text) !important; border-radius: var(--r-sm) !important; font-size: 0.88rem !important; padding: 0.6rem 0.9rem !important; }
+.stTextInput > div > div > input:focus, .stTextArea > div > div > textarea:focus { border-color: var(--blue) !important; box-shadow: 0 0 0 3px var(--blue-dim) !important; }
+label[data-testid="stWidgetLabel"] { font-size: 0.72rem !important; font-weight: 700 !important; letter-spacing: 0.06em !important; text-transform: uppercase !important; color: var(--text-dim) !important; }
 
-/* ── Inputs ── */
-.stTextInput > div > div > input, .stTextArea > div > div > textarea { background:var(--surface) !important; border:1px solid var(--border) !important; color:var(--text) !important; border-radius:var(--r) !important; font-family:var(--mono) !important; font-size:0.8rem !important; padding:0.55rem 0.85rem !important; }
-.stTextInput > div > div > input:focus, .stTextArea > div > div > textarea:focus { border-color:var(--green) !important; box-shadow:0 0 0 2px var(--green-dim) !important; }
-label[data-testid="stWidgetLabel"] { font-family:var(--mono) !important; font-size:0.62rem !important; letter-spacing:0.1em !important; text-transform:uppercase !important; color:var(--text-dim) !important; }
+/* Metrics */
+[data-testid="stMetric"] { background: var(--surface) !important; border: 1px solid var(--border) !important; border-radius: var(--r) !important; padding: 1rem 1.1rem !important; }
+[data-testid="stMetricLabel"] p { font-size: 0.65rem !important; font-weight: 800 !important; letter-spacing: 0.09em !important; text-transform: uppercase !important; color: var(--text-dim) !important; }
+[data-testid="stMetricValue"] { font-size: 1.7rem !important; font-weight: 800 !important; color: var(--text) !important; }
 
-/* ── Toggle ── */
-.stCheckbox label, .stToggle label { font-family:var(--mono) !important; font-size:0.72rem !important; color:var(--text-mid) !important; }
+/* Progress / DataFrame / Sidebar / Expander */
+.stProgress > div > div { background: var(--blue) !important; border-radius: 3px !important; }
+[data-testid="stDataFrame"] { border: 1px solid var(--border) !important; border-radius: var(--r) !important; }
+section[data-testid="stSidebar"] { background: var(--surface) !important; border-right: 1px solid var(--border) !important; }
+details { background: var(--surface) !important; border: 1px solid var(--border) !important; border-radius: var(--r-lg) !important; margin-bottom: 0.75rem !important; overflow: hidden; }
+summary { font-family: var(--sans) !important; font-size: 0.95rem !important; font-weight: 700 !important; padding: 1rem 1.2rem !important; color: var(--text) !important; }
+details[open] summary { border-bottom: 1px solid var(--border) !important; }
+details > div { padding: 1.3rem 1.4rem !important; }
+hr { border-color: var(--border) !important; margin: 1.4rem 0 !important; }
 
-/* ── Metrics ── */
-[data-testid="stMetric"] { background:var(--surface) !important; border:1px solid var(--border) !important; border-radius:var(--r) !important; padding:0.9rem 1rem !important; }
-[data-testid="stMetricLabel"] p { font-family:var(--mono) !important; font-size:0.58rem !important; letter-spacing:0.1em !important; text-transform:uppercase !important; color:var(--text-dim) !important; }
-[data-testid="stMetricValue"] { font-family:var(--mono) !important; font-size:1.5rem !important; font-weight:600 !important; color:var(--text) !important; }
+/* Utility */
+.err-card  { background: var(--red-dim);   border: 1px solid var(--red-bdr);   border-radius: var(--r); padding: 0.8rem 1rem; margin-bottom: 0.5rem; font-size: 0.85rem; color: var(--red); }
+.warn-card { background: var(--amber-dim); border: 1px solid var(--amber-bdr); border-radius: var(--r); padding: 0.8rem 1rem; font-size: 0.85rem; color: var(--amber); }
+.hint { font-size: 0.78rem; color: var(--text-dim); margin-top: 0.35rem; }
 
-/* ── Progress ── */
-.stProgress > div > div { background:var(--green) !important; border-radius:2px !important; }
-
-/* ── DataFrame ── */
-[data-testid="stDataFrame"] { border:1px solid var(--border) !important; border-radius:var(--r) !important; }
-
-/* ── Sidebar ── */
-section[data-testid="stSidebar"] { background:var(--bg2) !important; border-right:1px solid var(--border) !important; }
-
-/* ── Expander ── */
-details { background:var(--surface) !important; border:1px solid var(--border) !important; border-radius:var(--r-lg) !important; margin-bottom:0.6rem !important; overflow:hidden; }
-summary { font-family:var(--mono) !important; font-size:0.82rem !important; font-weight:500 !important; padding:0.9rem 1.1rem !important; color:var(--text) !important; letter-spacing:0.02em !important; }
-details[open] summary { border-bottom:1px solid var(--border) !important; color:var(--green) !important; }
-details > div { padding:1.1rem 1.3rem !important; }
-
-hr { border-color:var(--border) !important; margin:1.2rem 0 !important; }
-.err-card { background:var(--red-dim); border:1px solid var(--red-bdr); border-radius:var(--r); padding:0.75rem 1rem; margin-bottom:0.5rem; font-family:var(--mono); font-size:0.75rem; color:var(--red); }
-.warn-card { background:var(--amber-dim); border:1px solid var(--amber-bdr); border-radius:var(--r); padding:0.75rem 1rem; font-family:var(--mono); font-size:0.75rem; color:var(--amber); }
-.info-hint { font-family:var(--mono); font-size:0.62rem; color:var(--text-dim); margin-top:0.35rem; letter-spacing:0.04em; }
-
-/* ── Agent stat grid ── */
-.ast-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:0.5rem; }
-.ast { background:var(--surface2); border:1px solid var(--border); border-radius:var(--r); padding:0.75rem 0.9rem; }
-.ast-label { font-family:var(--mono); font-size:0.58rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-dim); margin-bottom:0.3rem; }
-.ast-val { font-family:var(--mono); font-size:1.3rem; font-weight:600; color:var(--text); }
-.ast-g { color:var(--green) !important; }
-.ast-r { color:var(--red) !important; }
-
-/* schema chips */
-.chips { display:flex; flex-wrap:wrap; gap:0.25rem; margin-top:0.35rem; }
-.chip { font-family:var(--mono); font-size:0.58rem; background:var(--surface2); border:1px solid var(--border); color:var(--cyan); padding:0.12rem 0.45rem; border-radius:3px; }
+/* Agent test stats */
+.ast-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+.ast { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 0.8rem 0.95rem; }
+.ast-lbl { font-size: 0.62rem; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.3rem; }
+.ast-val { font-size: 1.3rem; font-weight: 800; color: var(--text); }
+.ast-g { color: var(--green) !important; } .ast-r { color: var(--red) !important; }
 </style>
 """, unsafe_allow_html=True)
+
 
 # ============================================================================
 # CONSTANTS
@@ -1125,17 +978,52 @@ def results_to_df(results: list[AuditResult]) -> pd.DataFrame:
 # UI COMPONENTS
 # ============================================================================
 
-def render_header():
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    st.markdown(f"""
-    <div class="header-bar">
-        <div>
-            <div class="header-logo">PHARMA MCP AGENT READINESS AUDITOR</div>
-            <div class="header-tagline">// can an AI agent actually USE this site as an MCP tool?</div>
+
+# ============================================================================
+# UI COMPONENTS
+# ============================================================================
+
+PILLAR_UI = [
+    ("manifest",  "📡", "Agent Manifest",     20, "pf-b", "pc-b", "mcp.json · OpenAPI · ai-plugin.json"),
+    ("endpoints", "🔌", "Callable Endpoints", 25, "pf-t", "pc-t", "Drug lookup · trial finder · coverage API"),
+    ("schema",    "🗂",  "Structured Data",   20, "pf-g", "pc-g", "Drug · MedicalCondition · Trial schemas"),
+    ("trust",     "🏥", "Medical Authority",  20, "pf-a", "pc-a", "Citations · prescribing info · clinical data"),
+    ("context",   "📖", "Context Quality",    15, "pf-p", "pc-p", "MOA · dosing · indications for agents"),
+]
+VERDICT_CFG = {
+    "AGENT_READY": ("vg", "✅", "Agent Ready",       "var(--green)"),
+    "PARTIAL":     ("va", "⚠️", "Partially Ready",   "var(--amber)"),
+    "NOT_READY":   ("vr", "❌", "Not Agent Ready",   "var(--red)"),
+}
+RING_CFG = {"AGENT_READY": "sr-g", "PARTIAL": "sr-a", "NOT_READY": "sr-r"}
+FRIENDLY_PATHS = {
+    "/.well-known/mcp.json":       "MCP Manifest",
+    "/.well-known/ai-plugin.json": "AI Plugin",
+    "/api/mcp":                    "/api/mcp",
+    "/mcp":                        "/mcp",
+    "/api/v1/mcp":                 "/api/v1/mcp",
+    "/openapi.json":               "OpenAPI Spec",
+    "/swagger.json":               "Swagger Spec",
+    "/api-docs":                   "API Docs",
+}
+
+
+def render_hero():
+    st.markdown("""
+    <div class="hero">
+        <div class="hero-pill">🔬 XO Digital · MCP Readiness Platform</div>
+        <div class="hero-title">Pharma <em>MCP Agent</em> Readiness Auditor</div>
+        <div class="hero-sub">
+            Actively probes pharma websites to check whether AI agents can call them as live MCP tools —
+            scoring their manifests, endpoints, schemas, and context across five dimensions.
         </div>
-        <div class="header-right">
-            XO Digital · AI-First 2026<br>
-            <span>{now}</span>
+        <div class="fp-row">
+            <span class="fp on">⚡ Live Endpoint Probing</span>
+            <span class="fp on">🤖 Claude AI Analysis</span>
+            <span class="fp on">📄 Multi-page Crawl</span>
+            <span class="fp on">⚖️ Side-by-Side Compare</span>
+            <span class="fp on">📊 PDF Export</span>
+            <span class="fp on">💾 1-hour Cache</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -1143,178 +1031,168 @@ def render_header():
 
 def render_pillars(scores: MCPScores):
     cols = st.columns(5)
-    pillar_colors = [
-        ("#4ade80", "bf-g", "pillar-g"),
-        ("#67e8f9", "bf-c", "pillar-c"),
-        ("#4ade80", "bf-g", "pillar-g"),
-        ("#fbbf24", "bf-a", "pillar-a"),
-        ("#4ade80", "bf-g", "pillar-g"),
-    ]
-    for col, pillar, (color, barcls, pillarcls) in zip(cols, PILLARS, pillar_colors):
-        pid, label, desc, mx, _, _ = pillar
+    for col, (pid, icon, name, mx, fill_cls, card_cls, desc) in zip(cols, PILLAR_UI):
         val = scores.get(pid)
         pct = int((val / mx) * 100)
+        color = "var(--green)" if pct >= 70 else "var(--amber)" if pct >= 40 else "var(--red)"
         with col:
             st.markdown(f"""
-            <div class="pillar {pillarcls}">
-                <div class="pillar-label">{label}</div>
-                <div class="pillar-val" style="color:{color}">
-                    {val:.0f}<span class="pillar-max">/{mx}</span>
+            <div class="pc {card_cls}">
+                <div class="pc-icon">{icon}</div>
+                <div class="pc-name">{name}</div>
+                <div class="pc-score" style="color:{color}">
+                    {val:.0f}<span class="pc-denom">/{mx}</span>
                 </div>
-                <div class="bar-track"><div class="bar-fill {barcls}" style="width:{pct}%"></div></div>
-                <div class="pillar-pct">{pct}% · {desc}</div>
+                <div class="pc-bar"><div class="pc-fill {fill_cls}" style="width:{pct}%"></div></div>
+                <div class="pc-desc">{desc}</div>
             </div>""", unsafe_allow_html=True)
 
 
 def render_result_card(result: AuditResult, api_key: str = ""):
-    lvl_icon = {"AGENT_READY": "🟢", "PARTIAL": "🟡", "NOT_READY": "🔴"}[result.readiness_level]
-    lvl_label = result.readiness_level.replace("_", " ")
     found_eps = sum(1 for v in result.probed_endpoints.values() if v)
-    cache_tag = ' <span class="tag tag-cache">💾 cached</span>' if result.cached else ""
+    vcls, vicon, vlabel, _ = VERDICT_CFG[result.readiness_level]
+    cached_note = "  · 💾 cached" if result.cached else ""
 
     with st.expander(
-        f"{lvl_icon}  **{result.domain}**"
-        f"  ·  {result.scores.total:.0f}/100"
-        f"  ·  {lvl_label}"
-        f"  ·  {found_eps}/{len(MCP_ENDPOINT_PATHS)} endpoints"
+        f"{vicon}  **{result.domain}**"
+        f"  ·  Score: {result.scores.total:.0f}/100"
+        f"  ·  {vlabel}"
+        f"  ·  {found_eps}/{len(MCP_ENDPOINT_PATHS)} MCP endpoints live"
+        f"{cached_note}"
     ):
-        # Score badge + pillars
-        rc, pc = st.columns([1, 7])
-        with rc:
+        r_col, p_col = st.columns([1, 7])
+        with r_col:
+            rc = RING_CFG[result.readiness_level]
             st.markdown(f"""
-            <div style="padding-top:0.5rem;display:flex;justify-content:center;">
-                <div class="score-badge {result.badge_class}">
-                    {result.scores.total:.0f}
-                    <div class="sb-sub">/100</div>
-                </div>
+            <div style="display:flex;align-items:center;justify-content:center;padding-top:0.4rem;">
+                <div class="sr {rc}">{result.scores.total:.0f}<div class="sr-sub">/100</div></div>
             </div>""", unsafe_allow_html=True)
-        with pc:
+        with p_col:
             render_pillars(result.scores)
 
-        st.markdown("<div style='height:0.8rem'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
 
-        # Tags
-        mcp_tag = "tag-g" if result.manifest.has_mcp_json else "tag-dim"
-        api_tag = "tag-c" if result.manifest.has_openapi else "tag-dim"
+        # Quick-status bar
+        mcp  = "✅ mcp.json"  if result.manifest.has_mcp_json  else "❌ No mcp.json"
+        oas  = "✅ OpenAPI"   if result.manifest.has_openapi   else "❌ No OpenAPI"
+        plug = "✅ ai-plugin" if result.manifest.has_ai_plugin else "❌ No ai-plugin"
         st.markdown(f"""
-        <div class="tags">
-            <span class="tag {result.tag_class}">{lvl_label}</span>
-            <span class="tag {mcp_tag}">{'✓' if result.manifest.has_mcp_json else '✗'} mcp.json</span>
-            <span class="tag {api_tag}">{'✓' if result.manifest.has_openapi else '✗'} openapi</span>
-            <span class="tag {'tag-g' if result.manifest.has_ai_plugin else 'tag-dim'}">{'✓' if result.manifest.has_ai_plugin else '✗'} ai-plugin</span>
-            <span class="tag tag-dim">📄 {result.pages_crawled} pages</span>
-            <span class="tag tag-dim">⚡ {result.manifest.callable_functions} functions</span>
-            <span class="tag tag-dim">HTTP {result.status_code}</span>
-            {cache_tag}
+        <div style="display:flex;align-items:center;gap:0.8rem;flex-wrap:wrap;
+                    padding:0.65rem 0.9rem;background:var(--surface2);
+                    border-radius:var(--r-sm);margin-bottom:1.2rem;">
+            <span class="verdict {vcls}">{vicon} {vlabel}</span>
+            <span style="color:var(--border-lit)">|</span>
+            <span style="font-size:0.82rem;color:var(--text-mid)">{mcp}</span>
+            <span style="font-size:0.82rem;color:var(--text-mid)">{oas}</span>
+            <span style="font-size:0.82rem;color:var(--text-mid)">{plug}</span>
+            <span style="font-size:0.82rem;color:var(--text-mid)">📄 {result.pages_crawled} pages crawled</span>
+            <span style="font-size:0.82rem;color:var(--text-mid)">⚡ {result.manifest.callable_functions} agent functions detected</span>
         </div>""", unsafe_allow_html=True)
 
-        st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
-
-        # Three columns: Endpoints probed | Schema + context | Fixes
         c1, c2, c3 = st.columns(3)
 
         with c1:
-            st.markdown('<div class="slabel">Endpoint Probe</div>', unsafe_allow_html=True)
-            checks_html = '<div class="check-grid">'
+            st.markdown('<div class="sec-h">Live Endpoint Probe</div>', unsafe_allow_html=True)
+            st.caption("We tested these MCP paths — green means live.")
+            html = '<div class="probe-grid">'
             for path, found in result.probed_endpoints.items():
-                cls = "on" if found else "off"
-                icon = "✓" if found else "✗"
-                label = path.replace("/.well-known/", "·/").replace("/api/v1", "/api")
-                checks_html += f'<div class="check-row {cls}"><span class="chk-{"on" if found else "off"}">{icon}</span>{label}</div>'
-            checks_html += "</div>"
-            st.markdown(checks_html, unsafe_allow_html=True)
+                cls  = "probe-y" if found else "probe-n"
+                icon = "✓" if found else "·"
+                html += f'<div class="probe {cls}"><span>{icon}</span>{FRIENDLY_PATHS.get(path, path)}</div>'
+            html += "</div>"
+            st.markdown(html, unsafe_allow_html=True)
 
         with c2:
-            st.markdown('<div class="slabel">Schema + Context</div>', unsafe_allow_html=True)
-            schema_checks = {
-                "Drug schema":       result.schema.drug_schema,
-                "MedicalCondition":  result.schema.medical_condition,
-                "ClinicalTrial":     result.schema.clinical_trial,
-                "FAQPage":           result.schema.faq_schema,
-                "Mechanism of action": result.context.mechanism_of_action,
-                "Dosing info":       result.context.dosing_info,
-                "Indications":       result.context.indication_detail,
-                "Prescribing info":  result.trust.prescribing_info,
-            }
-            ch_html = '<div class="check-grid">'
-            for label, val in schema_checks.items():
-                cls = "on" if val else "off"
-                icon = "✓" if val else "✗"
-                ch_html += f'<div class="check-row {cls}"><span class="chk-{"on" if val else "off"}">{icon}</span>{label}</div>'
-            ch_html += "</div>"
-            st.markdown(ch_html, unsafe_allow_html=True)
-
+            st.markdown('<div class="sec-h">What Agents Can Access</div>', unsafe_allow_html=True)
+            st.caption("Data an AI agent can read, cite, or relay from this site.")
+            items = [
+                ("Drug / therapy schema",      result.schema.drug_schema),
+                ("Medical condition schema",   result.schema.medical_condition),
+                ("Clinical trial schema",      result.schema.clinical_trial),
+                ("FAQ schema (agent Q&A)",     result.schema.faq_schema),
+                ("Mechanism of action",        result.context.mechanism_of_action),
+                ("Dosing information",         result.context.dosing_info),
+                ("Approved indications",       result.context.indication_detail),
+                ("Prescribing information",    result.trust.prescribing_info),
+                ("PubMed / DOI citations",     result.trust.pubmed_refs),
+                ("Clinical study data",        result.trust.clinical_data),
+            ]
+            html = '<div class="checks">'
+            for label, val in items:
+                cls = "chk-pass" if val else "chk-fail"
+                icon = "✓" if val else "○"
+                html += f'<div class="chk {cls}"><span class="chk-icon">{icon}</span>{label}</div>'
+            html += "</div>"
+            st.markdown(html, unsafe_allow_html=True)
             if result.schema.detected_types:
                 st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
-                chips = "".join(f'<span class="chip">{t}</span>' for t in result.schema.detected_types[:6])
+                chips = "".join(f'<span class="chip">{t}</span>' for t in result.schema.detected_types[:8])
                 st.markdown(f'<div class="chips">{chips}</div>', unsafe_allow_html=True)
 
         with c3:
-            st.markdown('<div class="slabel">Priority Fixes</div>', unsafe_allow_html=True)
+            st.markdown('<div class="sec-h">Top Fixes</div>', unsafe_allow_html=True)
+            st.caption("Highest-impact changes to make this site agent-callable.")
             if result.improvements:
-                html = '<div class="fix-stack">'
-                for fix in result.improvements:
-                    html += f"""<div class="fix-row">
-                        <span>[{fix['pillar'].upper()}] {fix['label']}</span>
+                html = '<div class="fixes">'
+                for i, fix in enumerate(result.improvements, 1):
+                    html += f"""<div class="fix">
+                        <span class="fix-n">#{i}</span>
+                        <span style="flex:1;line-height:1.4">{fix['label']}</span>
                         <span class="fix-pts">+{fix['pts']}pts</span>
                     </div>"""
                 html += "</div>"
                 st.markdown(html, unsafe_allow_html=True)
             else:
-                st.markdown('<div class="no-fixes">✓ No critical gaps — site is agent-callable</div>',
+                st.markdown('<div class="fix-ok">🎉 No critical gaps — this site is agent-callable</div>',
                             unsafe_allow_html=True)
 
-        # AI Recommendations
-        st.markdown("<div style='height:0.8rem'></div>", unsafe_allow_html=True)
-        st.markdown('<div class="slabel">AI Recommendations</div>', unsafe_allow_html=True)
+        st.markdown("<div style='height:0.9rem'></div>", unsafe_allow_html=True)
+        st.markdown('<div class="sec-h">Claude AI Recommendations</div>', unsafe_allow_html=True)
 
         if result.ai_recommendations:
             st.markdown(f"""
             <div class="ai-box">
-                <div class="ai-box-header">⚡ Claude MCP Analysis · {result.domain}</div>
-                <div class="ai-box-body">{result.ai_recommendations}</div>
+                <div class="ai-lbl">🤖 Claude · MCP Integration Recommendations</div>
+                <div class="ai-body">{result.ai_recommendations}</div>
             </div>""", unsafe_allow_html=True)
         elif api_key:
-            if st.button("⚡ Generate AI Analysis", key=f"ai_{result.domain}"):
-                with st.spinner("Consulting Claude…"):
+            if st.button("🤖 Generate AI Recommendations", key=f"ai_{result.domain}"):
+                with st.spinner("Asking Claude for MCP integration recommendations…"):
                     result.ai_recommendations = get_ai_recommendations(result, api_key)
                     cache_set(result.url, result)
                 st.rerun()
         else:
             st.markdown(
-                '<div class="info-hint">// add anthropic api key in sidebar to unlock claude analysis</div>',
+                '<div class="hint">🔑 Add your Anthropic API key in the sidebar to unlock Claude\'s recommendations.</div>',
                 unsafe_allow_html=True)
 
 
-def render_kpi_row(results: list[AuditResult]):
+def render_kpi_row(results: list):
     ok = [r for r in results if r.ok]
     if not ok: return
-    avg    = np.mean([r.scores.total for r in ok])
-    ready  = sum(1 for r in ok if r.readiness_level == "AGENT_READY")
-    partial= sum(1 for r in ok if r.readiness_level == "PARTIAL")
-    not_r  = sum(1 for r in ok if r.readiness_level == "NOT_READY")
-    fix_pt = sum(r.fix_pts for r in ok)
-
-    avg_cls = "kpi-g" if avg >= 70 else "kpi-a" if avg >= 45 else "kpi-r"
+    avg     = np.mean([r.scores.total for r in ok])
+    ready   = sum(1 for r in ok if r.readiness_level == "AGENT_READY")
+    partial = sum(1 for r in ok if r.readiness_level == "PARTIAL")
+    not_r   = sum(1 for r in ok if r.readiness_level == "NOT_READY")
+    avg_cls = "kg" if avg >= 70 else "ka" if avg >= 45 else "kr"
     st.markdown(f"""
-    <div class="kpi-row">
-        <div class="kpi"><div class="kpi-label">Domains Audited</div><div class="kpi-val">{len(ok)}</div><div class="kpi-sub">in session</div></div>
-        <div class="kpi"><div class="kpi-label">Avg MCP Score</div><div class="kpi-val {avg_cls}">{avg:.1f}</div><div class="kpi-sub">out of 100</div></div>
-        <div class="kpi"><div class="kpi-label">Agent Ready</div><div class="kpi-val kpi-g">{ready}</div><div class="kpi-sub">score ≥ 70</div></div>
-        <div class="kpi"><div class="kpi-label">Partial</div><div class="kpi-val kpi-a">{partial}</div><div class="kpi-sub">score 45–69</div></div>
-        <div class="kpi"><div class="kpi-label">Not Ready</div><div class="kpi-val kpi-r">{not_r}</div><div class="kpi-sub">score &lt; 45</div></div>
+    <div class="kpi-grid">
+        <div class="kpi-card"><div class="kpi-icon">🔍</div><div class="kpi-lbl">Domains Audited</div><div class="kpi-val">{len(ok)}</div><div class="kpi-sub">this session</div></div>
+        <div class="kpi-card"><div class="kpi-icon">📊</div><div class="kpi-lbl">Avg MCP Score</div><div class="kpi-val {avg_cls}">{avg:.1f}</div><div class="kpi-sub">out of 100</div></div>
+        <div class="kpi-card"><div class="kpi-icon">✅</div><div class="kpi-lbl">Agent Ready</div><div class="kpi-val kg">{ready}</div><div class="kpi-sub">score ≥ 70</div></div>
+        <div class="kpi-card"><div class="kpi-icon">⚠️</div><div class="kpi-lbl">Partially Ready</div><div class="kpi-val ka">{partial}</div><div class="kpi-sub">score 45–69</div></div>
+        <div class="kpi-card"><div class="kpi-icon">❌</div><div class="kpi-lbl">Not Ready</div><div class="kpi-val kr">{not_r}</div><div class="kpi-sub">score &lt; 45</div></div>
     </div>""", unsafe_allow_html=True)
 
 
-def render_compare(history: list[AuditResult]):
+def render_compare(history: list):
     ok = [r for r in history if r.ok]
     if len(ok) < 2:
-        st.info("Audit at least 2 domains to use comparison view.")
+        st.info("Audit at least 2 domains to use the comparison view.")
         return
-
     domain_map = {r.domain: r for r in ok}
-    selected   = st.multiselect(
-        "SELECT DOMAINS TO COMPARE (2–4)",
+    selected = st.multiselect(
+        "Choose 2–4 domains to compare",
         options=list(domain_map.keys()),
         default=list(domain_map.keys())[:min(4, len(domain_map))],
         max_selections=4,
@@ -1322,87 +1200,71 @@ def render_compare(history: list[AuditResult]):
     if len(selected) < 2:
         st.warning("Select at least 2 domains.")
         return
-
     chosen = [domain_map[d] for d in selected]
-    n      = len(chosen)
+    n = len(chosen)
 
-    # Domain headers
-    header_cols = st.columns([1.5] + [1]*n)
-    header_cols[0].markdown('<div class="slabel" style="margin-top:1.5rem">Metric</div>',
-                            unsafe_allow_html=True)
-    level_colors = {"AGENT_READY": "#4ade80", "PARTIAL": "#fbbf24", "NOT_READY": "#f87171"}
-    for col, r in zip(header_cols[1:], chosen):
-        lc = level_colors[r.readiness_level]
+    hcols = st.columns([1.5] + [1]*n)
+    hcols[0].markdown("<div style='height:2.2rem'></div>", unsafe_allow_html=True)
+    for col, r in zip(hcols[1:], chosen):
+        vcls, vicon, vlabel, vcolor = VERDICT_CFG[r.readiness_level]
         col.markdown(f"""
-        <div style="text-align:center;padding:0.75rem;background:var(--surface);
-                    border:1px solid var(--border);border-radius:var(--r);
-                    border-top:3px solid {lc};">
-            <div style="font-family:var(--mono);font-size:1.6rem;font-weight:600;color:{lc}">{r.scores.total:.0f}</div>
-            <div style="font-family:var(--mono);font-size:0.55rem;color:var(--text-dim)">/100</div>
-            <div style="font-family:var(--sans);font-size:0.8rem;font-weight:600;color:var(--text);margin-top:3px">{r.domain}</div>
-            <span class="tag {r.tag_class}" style="margin-top:4px;display:inline-block">{r.readiness_level.replace("_"," ")}</span>
+        <div class="cmp-card" style="border-top-color:{vcolor};">
+            <div style="font-size:1.9rem;font-weight:800;color:{vcolor};">{r.scores.total:.0f}</div>
+            <div style="font-size:0.58rem;color:var(--text-dim);margin-bottom:0.35rem;">/100</div>
+            <div style="font-size:0.82rem;font-weight:700;color:var(--text);margin-bottom:0.4rem;">{r.domain}</div>
+            <span class="verdict {vcls}" style="font-size:0.7rem;">{vicon} {vlabel}</span>
         </div>""", unsafe_allow_html=True)
 
-    st.markdown("<div style='height:0.8rem'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height:0.75rem'></div>", unsafe_allow_html=True)
 
-    def cmp_row(label: str, values, fmt=str, higher_better=True):
+    def cmp_row(label, values, fmt=str, higher_better=True):
         cols = st.columns([1.5] + [1]*n)
-        cols[0].markdown(
-            f'<div style="font-family:var(--mono);font-size:0.65rem;color:var(--text-dim);'
-            f'text-transform:uppercase;letter-spacing:0.08em;padding-top:0.4rem;">{label}</div>',
-            unsafe_allow_html=True)
+        cols[0].markdown(f'<div class="cmp-lbl">{label}</div>', unsafe_allow_html=True)
         best = max(values) if higher_better else min(values)
         for col, val in zip(cols[1:], values):
-            is_best = val == best
-            style = ("color:var(--green);border:1px solid var(--green-bdr);background:var(--green-dim);font-weight:600"
-                     if is_best else
-                     "color:var(--text-dim);border:1px solid var(--border);background:var(--surface)")
-            col.markdown(
-                f'<div style="text-align:center;padding:0.45rem;border-radius:var(--r);'
-                f'font-family:var(--mono);font-size:0.85rem;{style}">{fmt(val)}</div>',
-                unsafe_allow_html=True)
+            cls = "cmp-w" if val == best else "cmp-l"
+            col.markdown(f'<div class="cmp-cell {cls}">{fmt(val)}</div>', unsafe_allow_html=True)
 
-    cmp_row("Total MCP Score", [r.scores.total for r in chosen], fmt=lambda x: f"{x:.0f}/100")
-    cmp_row("Agent Manifest",  [r.scores.manifest for r in chosen], fmt=lambda x: f"{x:.0f}/20")
-    cmp_row("Callable Endpoints", [r.scores.endpoints for r in chosen], fmt=lambda x: f"{x:.0f}/25")
-    cmp_row("Structured Schema",  [r.scores.schema for r in chosen], fmt=lambda x: f"{x:.0f}/20")
-    cmp_row("Medical Authority",  [r.scores.trust for r in chosen], fmt=lambda x: f"{x:.0f}/20")
-    cmp_row("Context Quality",    [r.scores.context for r in chosen], fmt=lambda x: f"{x:.0f}/15")
-    cmp_row("Endpoints Found",    [sum(1 for v in r.probed_endpoints.values() if v) for r in chosen], fmt=str)
-    cmp_row("Agent Functions",    [r.manifest.callable_functions for r in chosen], fmt=str)
-    cmp_row("Schema Types",       [len(r.schema.detected_types) for r in chosen], fmt=str)
-    cmp_row("Pages Crawled",      [r.pages_crawled for r in chosen], fmt=str)
-    cmp_row("Fix Points Needed",  [r.fix_pts for r in chosen], fmt=lambda x: f"+{x}pts", higher_better=False)
+    cmp_row("Total Score",          [r.scores.total for r in chosen],      fmt=lambda x: f"{x:.0f}/100")
+    cmp_row("Agent Manifest",       [r.scores.manifest for r in chosen],   fmt=lambda x: f"{x:.0f}/20")
+    cmp_row("Callable Endpoints",   [r.scores.endpoints for r in chosen],  fmt=lambda x: f"{x:.0f}/25")
+    cmp_row("Structured Schema",    [r.scores.schema for r in chosen],     fmt=lambda x: f"{x:.0f}/20")
+    cmp_row("Medical Authority",    [r.scores.trust for r in chosen],      fmt=lambda x: f"{x:.0f}/20")
+    cmp_row("Context Quality",      [r.scores.context for r in chosen],    fmt=lambda x: f"{x:.0f}/15")
+    cmp_row("Live Endpoints Found", [sum(1 for v in r.probed_endpoints.values() if v) for r in chosen], fmt=str)
+    cmp_row("Agent Functions",      [r.manifest.callable_functions for r in chosen], fmt=str)
+    cmp_row("Schema Types Found",   [len(r.schema.detected_types) for r in chosen],  fmt=str)
+    cmp_row("Pages Crawled",        [r.pages_crawled for r in chosen],     fmt=str)
+    cmp_row("Fix Points Needed",    [r.fix_pts for r in chosen], fmt=lambda x: f"+{x}pts", higher_better=False)
 
 
-def render_benchmarks(scan_results: list[AuditResult]):
-    st.markdown('<div class="slabel">Industry MCP Readiness Benchmarks</div>', unsafe_allow_html=True)
+def render_benchmarks(scan_results: list):
+    st.markdown('<div class="sec-h">Industry MCP Readiness Benchmarks</div>', unsafe_allow_html=True)
+    st.caption("Estimated MCP agent-readiness scores for major pharma brands based on publicly observable signals.")
     entries = sorted(
         [(co, cat, sc) for cat, companies in BENCHMARKS.items() for co, sc in companies.items()],
         key=lambda x: -x[2])
-    rows = ""
+    html = '<div class="bench-wrap">'
     for company, cat, score in entries:
-        rows += f"""<div class="bench-row">
-            <div class="bench-name">{company}</div>
-            <div class="bench-cat">{cat}</div>
-            <div class="bench-track"><div class="bench-fill" style="width:{score}%"></div></div>
-            <div class="bench-score">{score}</div>
+        color = "var(--green)" if score >= 70 else "var(--amber)" if score >= 45 else "var(--red)"
+        html += f"""<div class="bench-row">
+            <div class="bench-name">{company}</div><div class="bench-cat">{cat}</div>
+            <div class="bench-track"><div class="bench-fill" style="width:{score}%;background:{color};"></div></div>
+            <div class="bench-score" style="color:{color}">{score}</div>
         </div>"""
-    st.markdown(f"""
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:1.2rem 1.4rem;">
-        {rows}
-    </div>""", unsafe_allow_html=True)
-
+    html += "</div>"
+    st.markdown(html, unsafe_allow_html=True)
     ok = [r for r in scan_results if r.ok]
     if ok:
         st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
         bm_scores = [sc for _, companies in BENCHMARKS.items() for sc in companies.values()]
-        live_avg  = np.mean([r.scores.total for r in ok])
-        ind_avg   = np.mean(bm_scores)
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Your Portfolio Avg", f"{live_avg:.1f}")
-        col2.metric("Industry Avg",       f"{ind_avg:.1f}")
-        col3.metric("vs Industry",        f"{live_avg - ind_avg:+.1f}")
+        live_avg = np.mean([r.scores.total for r in ok])
+        ind_avg  = np.mean(bm_scores)
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Your Portfolio Avg", f"{live_avg:.1f}/100")
+        c2.metric("Industry Avg",       f"{ind_avg:.1f}/100")
+        c3.metric("vs Industry",        f"{live_avg - ind_avg:+.1f} pts")
+
 
 # ============================================================================
 # SESSION STATE
@@ -1419,7 +1281,7 @@ def init_state():
 
 def main():
     init_state()
-    render_header()
+    render_hero()
 
     # Sidebar
     with st.sidebar:
@@ -1443,7 +1305,7 @@ def main():
             cached = sum(1 for r in ok if r.cached)
             if cached: st.metric("From Cache", f"{cached}/{len(ok)}")
         else:
-            st.markdown('<div class="info-hint">// no audits yet</div>', unsafe_allow_html=True)
+            st.markdown('<div class="hint">// no audits yet</div>', unsafe_allow_html=True)
         st.markdown("---")
         if st.button("🗑 Clear Session"):
             st.session_state.history      = []
@@ -1470,14 +1332,14 @@ def main():
     # ══════════════════════════════
     with t1:
         mode = "multi-page + endpoint probe" if multi_page else "homepage + endpoint probe"
-        st.markdown(f'<div class="slabel">Paste pharma domains to audit · one per line · max 20 · {mode}</div>',
+        st.markdown(f'<div class="sec-h">Paste pharma domains to audit · one per line · max 20 · {mode}</div>',
                     unsafe_allow_html=True)
 
         ci, ca = st.columns([5, 1])
         with ci:
             raw = st.text_area("DOMAINS", value=DEFAULT_DOMAINS, height=170,
                                label_visibility="collapsed")
-            st.markdown('<div class="info-hint">// https prefix optional · results cached 1hr · retries on failure</div>',
+            st.markdown('<div class="hint">// https prefix optional · results cached 1hr · retries on failure</div>',
                         unsafe_allow_html=True)
         with ca:
             st.markdown("<div style='height:0.3rem'></div>", unsafe_allow_html=True)
@@ -1534,7 +1396,7 @@ def main():
                             bar.empty()
                             st.rerun()
 
-                st.markdown(f'<div class="slabel">{len(ok_r)} domain(s) audited</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="sec-h">{len(ok_r)} domain(s) audited</div>', unsafe_allow_html=True)
                 for r in ok_r:
                     render_result_card(r, api_key=api_key)
 
@@ -1545,14 +1407,14 @@ def main():
     # TAB 2 — COMPARE
     # ══════════════════════════════
     with t2:
-        st.markdown('<div class="slabel">Side-by-side MCP readiness comparison</div>', unsafe_allow_html=True)
+        st.markdown('<div class="sec-h">Side-by-side MCP readiness comparison</div>', unsafe_allow_html=True)
         render_compare(st.session_state.history)
 
     # ══════════════════════════════
     # TAB 3 — AGENT TEST
     # ══════════════════════════════
     with t3:
-        st.markdown('<div class="slabel">Deep-probe a single domain for MCP agent compatibility</div>',
+        st.markdown('<div class="sec-h">Deep-probe a single domain for MCP agent compatibility</div>',
                     unsafe_allow_html=True)
 
         cu, cb = st.columns([5, 1])
@@ -1575,19 +1437,19 @@ def main():
                     st.markdown(f"""
                     <div class="ast-grid">
                         <div class="ast" style="grid-column:span 2">
-                            <div class="ast-label">Readiness Level</div>
+                            <div class="ast-lbl">Readiness Level</div>
                             <div class="ast-val {lc}">{result.readiness_level.replace("_"," ")}</div>
                         </div>
-                        <div class="ast"><div class="ast-label">MCP Score</div><div class="ast-val">{result.scores.total:.0f}/100</div></div>
-                        <div class="ast"><div class="ast-label">mcp.json</div><div class="ast-val {'ast-g' if result.manifest.has_mcp_json else 'ast-r'}">{'✓' if result.manifest.has_mcp_json else '✗'}</div></div>
-                        <div class="ast"><div class="ast-label">OpenAPI</div><div class="ast-val {'ast-g' if result.manifest.has_openapi else 'ast-r'}">{'✓' if result.manifest.has_openapi else '✗'}</div></div>
-                        <div class="ast"><div class="ast-label">Functions</div><div class="ast-val">{result.manifest.callable_functions}</div></div>
+                        <div class="ast"><div class="ast-lbl">MCP Score</div><div class="ast-val">{result.scores.total:.0f}/100</div></div>
+                        <div class="ast"><div class="ast-lbl">mcp.json</div><div class="ast-val {'ast-g' if result.manifest.has_mcp_json else 'ast-r'}">{'✓' if result.manifest.has_mcp_json else '✗'}</div></div>
+                        <div class="ast"><div class="ast-lbl">OpenAPI</div><div class="ast-val {'ast-g' if result.manifest.has_openapi else 'ast-r'}">{'✓' if result.manifest.has_openapi else '✗'}</div></div>
+                        <div class="ast"><div class="ast-lbl">Functions</div><div class="ast-val">{result.manifest.callable_functions}</div></div>
                     </div>""", unsafe_allow_html=True)
                     st.markdown("<div style='height:0.8rem'></div>", unsafe_allow_html=True)
                     render_pillars(result.scores)
 
                 with c2:
-                    st.markdown('<div class="slabel">Raw MCP Probe Payload</div>', unsafe_allow_html=True)
+                    st.markdown('<div class="sec-h">Raw MCP Probe Payload</div>', unsafe_allow_html=True)
                     st.code(json.dumps({
                         "domain": result.domain,
                         "mcp_readiness": result.readiness_level,
@@ -1620,17 +1482,17 @@ def main():
     # TAB 5 — EXECUTIVE
     # ══════════════════════════════
     with t5:
-        st.markdown('<div class="slabel">Executive dashboard · all audited domains</div>', unsafe_allow_html=True)
+        st.markdown('<div class="sec-h">Executive dashboard · all audited domains</div>', unsafe_allow_html=True)
         ok_all = [r for r in st.session_state.history if r.ok]
 
         if not ok_all:
-            st.markdown('<div class="info-hint">// run an audit first to unlock executive view</div>',
+            st.markdown('<div class="hint">// run an audit first to unlock executive view</div>',
                         unsafe_allow_html=True)
         else:
             render_kpi_row(ok_all)
             df = results_to_df(ok_all)
 
-            st.markdown('<div class="slabel">Leaderboard</div>', unsafe_allow_html=True)
+            st.markdown('<div class="sec-h">Leaderboard</div>', unsafe_allow_html=True)
 
             def _lc(v):
                 if v == "AGENT READY": return "color:#4ade80;font-weight:700"
