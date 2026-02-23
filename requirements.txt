@@ -1,0 +1,12 @@
+streamlit
+requests
+beautifulsoup4
+lxml
+pydantic
+tldextract
+python-dateutil
+rich
+playwright
+pandas
+matplotlib
+jsonschema
