@@ -1,6 +1,6 @@
 """
-Pharma MCP/GEO Intelligence Engine v5 - ENTERPRISE EDITION
-✅ FIXED KeyError + OpenClaw Model Input + UI Polish
+Pharma MCP/GEO Intelligence Engine v4 - Generic Pharma Auditor
+Audits competitor MCP readiness, generates agent handshake manifests, predicts GEO impact
 """
 
 import streamlit as st
@@ -9,292 +9,297 @@ import json
 import re
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse
+import zipfile
 import io
-from datetime import datetime
 
-# Session state for historical tracking
-if 'audit_history' not in st.session_state:
-    st.session_state.audit_history = []
-if 'current_results' not in st.session_state:
-    st.session_state.current_results = []
+# Optional Playwright
+USE_PLAYWRIGHT = False
+try:
+    from playwright.sync_api import sync_playwright
+    USE_PLAYWRIGHT = True
+except:
+    USE_PLAYWRIGHT = False
 
-# OpenClaw Model Selection (NEW)
-OPENCLAW_MODELS = {
-    "light": "Mistral 7B (Fast)",
-    "heavy": "MiniMax M2.5 (Deep Pharma Analysis)",
-    "agency": "Enterprise Blend"
-}
-
-class MockOpenClawClient:
-    def chat(self, prompt, model="light"):
-        if model == "heavy":
-            return f"""
-            🧬 **PHARMA DEEP ANALYSIS** (MiniMax M2.5)
-            🎯 GEO Score: 87/100 - Excellent FAQ + MedicalEntity coverage
-            🤖 MCP Ready: navigator.modelContext detected
-            💡 Action: Add MedicalTrial schema (+8pts predicted)
-            🚀 Agent Manifest: Ready for production handshake
-            """
-        elif model == "agency":
-            return f"""
-            📊 **AGENCY INTEL** (Enterprise Blend)
-            💼 Client Pitch: "Competitor leads by 24 GEO points"
-            📈 Quick Win: FAQPage schema = +15pts immediate
-            🤖 MCP Gap: No agent functions detected
-            📋 Copy-paste ready recommendations generated
-            """
-        else:
-            return f"""
-            📊 **QUICK SCAN** (Mistral 7B)
-            Score: {np.random.randint(65, 92)}/100
-            Key Findings: {np.random.randint(2, 6)}/8 E-E-A-T signals
-            GEO Action: Add FAQPage schema (+12pts)
-            """
-
-OPENCLAW_CLIENT = MockOpenClawClient()
-USER_AGENT = "PharmaMCP-Auditor/5.0"
+USER_AGENT = "PharmaMCP-Auditor/4.0"
 TIMEOUT = 20
 
 # ------------------------------------------------------------
-# FIXED SCORING + TOOLTIPS
+# FETCH FUNCTIONS
 # ------------------------------------------------------------
 
-def score_breakdown_ui(score_data, weights):
-    """Beautiful score breakdown with hover tooltips"""
-    col1, col2, col3, col4, col5, col6, total_col = st.columns(7)
-    
-    with col1:
-        st.metric("🔵 Schema", f"{score_data['schema']}/{weights['schema']}",
-                 help="**🔵 Schema Diversity** | JSON-LD @types × 3pts | MedicalEntity, FAQPage = GEO power")
-    
-    with col2:
-        st.metric("🧬 Entities", f"{score_data['entities']}/{weights['entities']}",
-                 help="**🧬 Pharma Entities** | DrugClass, MedicalTrial (5pts each) | AI answer targeting")
-    
-    with col3:
-        st.metric("📚 E-E-A-T", f"{score_data['eat']}/{weights['eat']}",
-                 help="**📚 E-E-A-T** | PubMed, PI, reviewed-by (5pts each) | YMYL authority")
-    
-    with col4:
-        st.metric("⚙️ Tech", f"{score_data['status']}/{weights['status']}",
-                 help="**⚙️ Technical** | HTTP 200 = full points | Agent reliability")
-    
-    with col5:
-        st.metric("🎯 GEO", f"{score_data['geo']}/{weights['geo']}",
-                 help="**🎯 GEO Readiness** | FAQ + citations | Perplexity/ChatGPT ranking")
-    
-    with col6:
-        st.metric("🤖 MCP", f"{score_data['mcp']}/{weights['mcp']}",
-                 help="**🤖 MCP Agentic** | navigator.modelContext = agent-ready")
-    
-    with total_col:
-        st.metric("🏆 TOTAL", f"{score_data['total']}/100",
-                 help="**🏆 Final Score** | >85=Leader | 70-85=Competitive | <70=Optimize")
-
-def compute_score(types, signals, status, mcp_signals, custom_weights=None):
-    if custom_weights is None:
-        custom_weights = {'schema': 30, 'entities': 25, 'eat': 40, 'status': 15, 'geo': 20, 'mcp': 25}
-    
-    schema_diversity = min(len(types) * 3, custom_weights['schema'])
-    important_entities = ["DrugClass", "MedicalCondition", "PharmaceuticalProduct", "MedicalScholarlyArticle", "MedicalTrial", "MedicalGuideline", "FAQPage"]
-    entity_coverage = min(sum(1 for t in types if any(ent in t for ent in important_entities)) * 5, custom_weights['entities'])
-    eat_signals = min(sum(signals.values()) * 5, custom_weights['eat'])
-    status_score = custom_weights['status'] if status == 200 else 0
-    geo_score = min(len(types) * 2 + sum(signals[k] for k in ["faq", "references", "pubmed"]), custom_weights['geo'])
-    mcp_score = (custom_weights['mcp'] if mcp_signals["webmcp_ready"] else 0) + min(mcp_signals["mcp_manifests"] * 5, 15) + min(mcp_signals["agent_functions"] * 2, 10)
-    
-    total = min(schema_diversity + entity_coverage + eat_signals + status_score + geo_score + mcp_score, 100)
-    
-    return {
-        "total": total, "schema": schema_diversity, "entities": entity_coverage,
-        "eat": eat_signals, "status": status_score, "geo": geo_score, "mcp": min(mcp_score, custom_weights['mcp'])
-    }
+def fetch_page(url, use_js=False):
+    """Fetch page HTML with optional JS rendering"""
+    if use_js and USE_PLAYWRIGHT:
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True)
+                page = browser.new_page()
+                page.goto(url, timeout=20000)
+                page.wait_for_load_state("networkidle")
+                html = page.content()
+                browser.close()
+                return html, 200
+        except:
+            return "", 0
+    else:
+        try:
+            r = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT)
+            return r.text, r.status_code
+        except:
+            return "", 0
 
 # ------------------------------------------------------------
-# CORE FUNCTIONS (FIXED)
+# PARSE FUNCTIONS (ORIGINAL + ENHANCED)
 # ------------------------------------------------------------
 
-@st.cache_data(ttl=3600)
-def analyze_url(url):
-    """Single URL analysis"""
-    try:
-        r = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT)
-        html = r.text
-        status = r.status_code
-        
-        jsonld = extract_jsonld(html)
-        types = flatten_types(jsonld)
-        signals = extract_signals(html)
-        mcp_signals = detect_mcp_signals(html)
-        score_data = compute_score(types, signals, status, mcp_signals)
-        
-        return {
-            "url": url, "score_data": score_data, "types": types[:5],
-            "signals": signals, "mcp": mcp_signals, "status": status,
-            "timestamp": datetime.now().isoformat()
-        }
-    except:
-        return {"url": url, "error": "Failed to fetch", "timestamp": datetime.now().isoformat()}
-
-def extract_jsonld(html): 
-    if not html: return []
+def extract_jsonld(html):
+    """Extract JSON-LD structured data from HTML"""
+    if not html:
+        return []
     soup = BeautifulSoup(html, "lxml")
     scripts = soup.find_all("script", type="application/ld+json")
     data = []
     for s in scripts:
-        try: data.append(json.loads(s.string or ""))
-        except: pass
+        try:
+            parsed = json.loads(s.string or "")
+            data.append(parsed)
+        except:
+            continue
     return data
 
 def flatten_types(jsonld):
+    """Extract all @type values from JSON-LD"""
     types = set()
     def walk(node):
-        if isinstance(node, dict) and "@type" in node:
-            if isinstance(node["@type"], list): types.update(node["@type"])
-            else: types.add(node["@type"])
-        elif isinstance(node, dict): [walk(v) for v in node.values()]
-        elif isinstance(node, list): [walk(x) for x in node]
-    for j in jsonld: walk(j)
+        if isinstance(node, dict):
+            if "@type" in node:
+                if isinstance(node["@type"], list):
+                    types.update(node["@type"])
+                else:
+                    types.add(node["@type"])
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for x in node:
+                walk(x)
+    for j in jsonld:
+        walk(j)
     return list(types)
 
 def extract_signals(html):
-    if not html: return {k: False for k in ["reviewed", "pi", "medguide", "adverse", "pubmed", "doi", "references", "faq"]}
+    """Extract pharma E-E-A-T signals from page content"""
+    if not html:
+        return {k: False for k in ["reviewed", "pi", "medguide", "adverse", "pubmed", "doi", "references", "faq"]}
     text = html.lower()
     return {
         "reviewed": "reviewed by" in text or "medically reviewed" in text,
-        "pi": "prescribing information" in text, "medguide": "medication guide" in text,
-        "adverse": "adverse" in text and "event" in text, "pubmed": "pubmed" in text,
+        "pi": "prescribing information" in text,
+        "medguide": "medication guide" in text,
+        "adverse": "adverse" in text and "event" in text,
+        "pubmed": "pubmed" in text,
         "doi": bool(re.search(r"\b10\.\d{4,9}/", text)),
         "references": "references" in text or "source" in text,
         "faq": "faq" in text or "frequently asked" in text,
     }
 
 def detect_mcp_signals(html):
-    if not html: return {"webmcp_ready": False, "mcp_manifests": 0, "agent_functions": 0}
+    """Detect WebMCP, MCP manifests, agent handshake readiness"""
+    if not html:
+        return {"webmcp_ready": False, "mcp_manifests": 0, "agent_functions": 0}
+    
     soup = BeautifulSoup(html, "lxml")
+    
+    # WebMCP navigator.modelContext detection
+    webmcp = "navigator.modelContext" in html
+    
+    # MCP Manifests (JSON tool definitions)
+    mcp_manifests = len(soup.find_all("script", {"type": "application/mcp+json"}))
+    
+    # Agent function keywords (get_, check_, find_, etc.)
+    agent_functions = len(re.findall(r"\b(get_|check_|find_|book_|schedule_)", html, re.I))
+    
     return {
-        "webmcp_ready": "navigator.modelContext" in html,
-        "mcp_manifests": len(soup.find_all("script", {"type": "application/mcp+json"})),
-        "agent_functions": len(re.findall(r"\b(get_|check_|find_|book_|schedule_)", html, re.I))
+        "webmcp_ready": webmcp,
+        "mcp_manifests": mcp_manifests,
+        "agent_functions": agent_functions
     }
 
 # ------------------------------------------------------------
-# PDF EXPORT
+# SCORING MODEL v4 (GEO + MCP + Agentic)
 # ------------------------------------------------------------
 
-def export_pdf(results):
-    df = pd.DataFrame([{
-        "Domain": r["url"], "GEO_MCP_Score": r["score_data"]["total"],
-        "MCP_Ready": r["mcp"]["webmcp_ready"], "HTTP_Status": r.get("status", "N/A")
-    } for r in results if "score_data" in r])
-    csv = df.to_csv(index=False).encode('utf-8')
-    st.download_button("📥 Download Client Report", csv, 
-                      f"pharma-mcp-audit-{datetime.now().strftime('%Y%m%d')}.csv", "text/csv")
+def compute_score(types, signals, status):
+    """Base pharma E-E-A-T scoring"""
+    schema_diversity = min(len(types) * 3, 30)
+    entity_coverage = 0
+    important_entities = ["Drug", "MedicalCondition", "MedicalWebPage", "FAQPage", "MedicalTrial"]
+    entity_coverage = sum(5 for e in important_entities if e in types)
+    entity_coverage = min(entity_coverage, 20)
+    
+    trust = 0
+    trust += 10 if signals["reviewed"] else 0
+    trust += 10 if signals["pi"] else 0
+    trust += 5 if signals["medguide"] else 0
+    
+    evidence = 0
+    evidence += 10 if signals["pubmed"] else 0
+    evidence += 10 if signals["doi"] else 0
+    evidence += 5 if signals["references"] else 0
+    
+    compliance = 10 if signals["adverse"] else 0
+    crawl = 10 if status == 200 else 0
+    
+    total = schema_diversity + entity_coverage + trust + evidence + compliance + crawl
+    return min(total, 100), {
+        "schema_diversity": schema_diversity,
+        "entity_coverage": entity_coverage,
+        "trust": trust,
+        "evidence": evidence,
+        "compliance": compliance,
+        "crawl": crawl
+    }
+
+def compute_mcp_geo_score(types, signals, mcp_signals, status):
+    """Full MCP/GEO score with agent handshake bonuses"""
+    base_score, base_breakdown = compute_score(types, signals, status)
+    
+    # MCP/Agent bonuses
+    mcp_bonus = min(mcp_signals["mcp_manifests"] * 15, 30)
+    agent_bonus = min(mcp_signals["agent_functions"] * 2, 15)
+    webmcp_bonus = 20 if mcp_signals["webmcp_ready"] else 0
+    
+    total = base_score + mcp_bonus + agent_bonus + webmcp_bonus
+    return min(total, 100), {
+        **base_breakdown,
+        "mcp_bonus": mcp_bonus,
+        "agent_bonus": agent_bonus,
+        "webmcp_bonus": webmcp_bonus
+    }
+
+def entity_authority_index(types):
+    """Medical entity authority scoring"""
+    score = 0
+    medical_entities = ["Drug", "MedicalCondition", "MedicalTherapy", "MedicalTrial", "FAQPage"]
+    score += sum(20 for e in medical_entities if e in types)
+    if len(types) > 5:
+        score += 20
+    return min(score, 100)
 
 # ------------------------------------------------------------
-# MAIN APP - FIXED PIVOT + OPENCLAW INPUT
+# GENERIC PHARMA MCP TOOLS
 # ------------------------------------------------------------
 
-def main():
-    st.set_page_config(page_title="Pharma MCP/GEO v5", layout="wide", initial_sidebar_state="expanded")
-    
-    # Gradient header
-    st.markdown("""
-    <div style='background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); padding: 2rem; border-radius: 10px; color: white; text-align: center;'>
-        <h1>🔬 Pharma MCP/GEO Intelligence Engine v5</h1>
-        <p><strong>🏢 ENTERPRISE</strong> | Bulk • Historical • Custom Weights • OpenClaw</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # GLOBAL OPENCLAW CONTROL (NEW)
-    col1, col2 = st.columns([3,1])
-    with col2:
-        st.selectbox("🤖 OpenClaw Model", OPENCLAW_MODELS.keys(), key="global_model")
-    
-    tab1, tab2, tab3, tab4 = st.tabs(["🚀 Quick Audit", "📈 Historical", "⚙️ Bulk", "📊 Dashboard"])
-    
-    with tab1:
-        # QUICK AUDIT - Sidebar input
-        with st.sidebar:
-            st.header("🚀 Quick Audit")
-            urls_input = st.text_area("URLs", value="https://www.lilly.com/\nhttps://www.pfizer.com/", height=150)
-            if st.button("🚀 RUN AUDIT", type="primary", use_container_width=True):
-                urls = [u.strip() for u in urls_input.split("\n") if u.strip()]
-                st.session_state.current_results = [analyze_url(url) for url in urls]
-                st.session_state.audit_history.extend([r for r in st.session_state.current_results if 'error' not in r])
-        
-        if st.session_state.current_results:
-            for r in st.session_state.current_results:
-                if 'error' not in r:
-                    with st.expander(f"🔍 {r['url']} | {r['score_data']['total']:.0f}/100"):
-                        score_breakdown_ui(r["score_data"], {
-                            'schema': 30, 'entities': 25, 'eat': 40, 'status': 15, 'geo': 20, 'mcp': 25
-                        })
-                        st.json({"MCP": r["mcp"], "Schemas": r["types"]})
-    
-    with tab2:
-        # FIXED HISTORICAL TRACKING
-        st.subheader("📈 Historical Tracking")
-        valid_history = [r for r in st.session_state.audit_history if 'score_data' in r]
-        
-        if valid_history:
-            st.success(f"✅ {len(valid_history)} audits tracked")
-            
-            # FIXED: Safe pivot with proper column access
-            hist_df = pd.DataFrame([{
-                'url': r['url'], 
-                'score': r['score_data']['total'],
-                'timestamp': pd.to_datetime(r['timestamp'])
-            } for r in valid_history])
-            
-            if len(hist_df) > 1:
-                st.line_chart(hist_df.pivot(index='timestamp', columns='url', values='score'))
-            
-            st.dataframe(hist_df.round(1))
-        else:
-            st.info("👈 Run Quick Audit to build history")
-    
-    with tab3:
-        # BULK ANALYSIS
-        col1, col2 = st.columns(2)
-        with col1:
-            uploaded_file = st.file_uploader("📁 CSV/TXT Domains", type=['csv','txt'])
-            domains = []
-            if uploaded_file:
-                content = uploaded_file.read().decode()
-                domains = [line.strip() for line in content.splitlines() if line.strip()]
-                st.success(f"✅ Loaded {len(domains)} domains")
-        
-        with col2:
-            weights = {
-                'schema': st.slider("🔵 Schema", 10, 40, 30),
-                'entities': st.slider("🧬 Entities", 10, 40, 25),
-                'eat': st.slider("📚 E-E-A-T", 20, 60, 40),
-                'status': st.slider("⚙️ Tech", 5, 25, 15),
-                'geo': st.slider("🎯 GEO", 10, 30, 20),
-                'mcp': st.slider("🤖 MCP", 15, 40, 25)
+PHARMA_MCP_TOOLS = {
+    "get_trial_eligibility": {
+        "name": "get_trial_eligibility",
+        "description": "Check patient eligibility for clinical trials by age, condition, location",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "age": {"type": "number"},
+                "condition": {"type": "string"},
+                "zip_code": {"type": "string"}
             }
-        
-        if st.button("⚡ BULK AUDIT", type="primary") and domains:
-            with st.spinner(f"Processing {min(25, len(domains))} domains..."):
-                results = [analyze_url(d) for d in domains[:25]]
-                st.session_state.bulk_results = results
-                export_pdf(results)
-    
-    with tab4:
-        # DASHBOARD
-        valid_history = [r for r in st.session_state.audit_history if 'score_data' in r]
-        if valid_history:
-            col1, col2, col3, col4 = st.columns(4)
-            with col1: st.metric("📈 Audits", len(valid_history))
-            with col2: st.metric("🎯 Avg Score", f"{np.mean([r['score_data']['total'] for r in valid_history]):.1f}/100")
-            with col3: st.metric("🤖 MCP Ready", sum(r['mcp']['webmcp_ready'] for r in valid_history))
-            with col4: st.metric("🔥 >80 Score", sum(r['score_data']['total'] > 80 for r in valid_history))
+        }
+    },
+    "check_coverage": {
+        "name": "check_coverage",
+        "description": "Verify insurance/pharmacy coverage by NDC, plan, location",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "ndc": {"type": "string"},
+                "insurance_plan": {"type": "string"},
+                "pharmacy_zip": {"type": "string"}
+            }
+        }
+    },
+    "get_dosing_schedule": {
+        "name": "get_dosing_schedule",
+        "description": "Return dosing schedule by patient weight, condition, administration route",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "patient_weight_kg": {"type": "number"},
+                "condition": {"type": "string"}
+            }
+        }
+    },
+    "find_specialists": {
+        "name": "find_specialists",
+        "description": "Locate prescribing specialists by condition, location, insurance",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "condition": {"type": "string"},
+                "zip_code": {"type": "string"},
+                "insurance": {"type": "string"}
+            }
+        }
+    }
+}
 
-if __name__ == "__main__":
-    main()
+def generate_pharma_mcp_manifest(target_urls, brand_name="Pharma Brand"):
+    """Generate generic pharma MCP manifest"""
+    manifest = {
+        "@context": ["https://schema.org", "https://modelcontext.org"],
+        "@type": "MedicalWebPage",
+        "name": f"{brand_name} Agentic MCP Manifest",
+        "mcpTools": list(PHARMA_MCP_TOOLS.values()),
+        "optimizedPages": [
+            {
+                "url": target_urls[i] if i < len(target_urls) else "",
+                "primaryTool": list(PHARMA_MCP_TOOLS.keys())[i % len(PHARMA_MCP_TOOLS)]
+            } for i in range(min(3, len(target_urls)))
+        ],
+        "policy": {
+            "hipaaCompliant": True,
+            "reviewedBy": "Medical Affairs Team",
+            "lastReviewed": "2026-02-23"
+        }
+    }
+    return manifest
+
+def generate_geo_schema(url, tool_name, brand_name="Pharma Brand"):
+    """Generate GEO-optimized schema for specific page"""
+    return {
+        "@context": "https://schema.org",
+        "@type": "MedicalWebPage",
+        "url": url,
+        "name": f"{brand_name} {tool_name.replace('_', ' ').title()}",
+        "reviewedBy": {
+            "@type": "MedicalProfessional",
+            "name": f"{brand_name} Medical Team"
+        },
+        "mcpTool": PHARMA_MCP_TOOLS[tool_name]
+    }
+
+# ------------------------------------------------------------
+# DOWNLOAD PACKAGE
+# ------------------------------------------------------------
+
+def create_download_package(target_urls, brand_name="Pharma Brand"):
+    """Create complete MCP/GEO deployment package"""
+    zip_buffer = io.BytesIO()
+    
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        # Main MCP Manifest
+        manifest = generate_pharma_mcp_manifest(target_urls, brand_name)
+        zip_file.writestr("mcp-manifest.json", json.dumps(manifest, indent=2))
+        
+        # Page-specific schemas
+        for i, url in enumerate(target_urls[:3]):
+            tool_name = list(PHARMA_MCP_TOOLS.keys())[i]
+            schema = generate_geo_schema(url, tool_name, brand_name)
+            zip_file.writestr(f"{tool_name}-schema.json", json.dumps(schema, indent=2))
+        
+        # Deployment guide
+        guide = f"""PHARMA MCP/GEO DEPLOYMENT GUIDE - {brand_name}
+
+1. Add MCP Manifest to <head> of all pages:
 
 
 
