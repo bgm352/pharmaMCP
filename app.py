@@ -1,3 +1,8 @@
+"""
+Pharma MCP/GEO Intelligence Engine v4 - Generic Pharma Auditor
+Audits competitor MCP readiness, generates agent handshake manifests, predicts GEO impact
+"""
+
 import streamlit as st
 import requests
 import json
@@ -18,22 +23,15 @@ try:
 except:
     USE_PLAYWRIGHT = False
 
-USER_AGENT = "BioGraphMCP/2.0"
+USER_AGENT = "PharmaMCP-Auditor/4.0"
 TIMEOUT = 20
 
-# XOLAIR DEFAULTS
-XOLAIR_COMPETITORS = ["nucala.com", "dupixent.com", "fasenra.com", "tezspire.com", "cinqaero.com"]
-XOLAIR_URLS = [
-    "https://www.xolair.com/asthma/index.html",
-    "https://www.xolair.com/hives/index.html", 
-    "https://www.xolair.com/food-allergy/index.html"
-]
-
 # ------------------------------------------------------------
-# ENHANCED FETCH + MCP DETECTION
+# FETCH FUNCTIONS
 # ------------------------------------------------------------
 
 def fetch_page(url, use_js=False):
+    """Fetch page HTML with optional JS rendering"""
     if use_js and USE_PLAYWRIGHT:
         try:
             with sync_playwright() as p:
@@ -53,35 +51,120 @@ def fetch_page(url, use_js=False):
         except:
             return "", 0
 
+# ------------------------------------------------------------
+# PARSE FUNCTIONS (ORIGINAL + ENHANCED)
+# ------------------------------------------------------------
+
+def extract_jsonld(html):
+    """Extract JSON-LD structured data from HTML"""
+    if not html:
+        return []
+    soup = BeautifulSoup(html, "lxml")
+    scripts = soup.find_all("script", type="application/ld+json")
+    data = []
+    for s in scripts:
+        try:
+            parsed = json.loads(s.string or "")
+            data.append(parsed)
+        except:
+            continue
+    return data
+
+def flatten_types(jsonld):
+    """Extract all @type values from JSON-LD"""
+    types = set()
+    def walk(node):
+        if isinstance(node, dict):
+            if "@type" in node:
+                if isinstance(node["@type"], list):
+                    types.update(node["@type"])
+                else:
+                    types.add(node["@type"])
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for x in node:
+                walk(x)
+    for j in jsonld:
+        walk(j)
+    return list(types)
+
+def extract_signals(html):
+    """Extract pharma E-E-A-T signals from page content"""
+    if not html:
+        return {k: False for k in ["reviewed", "pi", "medguide", "adverse", "pubmed", "doi", "references", "faq"]}
+    text = html.lower()
+    return {
+        "reviewed": "reviewed by" in text or "medically reviewed" in text,
+        "pi": "prescribing information" in text,
+        "medguide": "medication guide" in text,
+        "adverse": "adverse" in text and "event" in text,
+        "pubmed": "pubmed" in text,
+        "doi": bool(re.search(r"\b10\.\d{4,9}/", text)),
+        "references": "references" in text or "source" in text,
+        "faq": "faq" in text or "frequently asked" in text,
+    }
+
 def detect_mcp_signals(html):
     """Detect WebMCP, MCP manifests, agent handshake readiness"""
+    if not html:
+        return {"webmcp_ready": False, "mcp_manifests": 0, "agent_functions": 0}
+    
     soup = BeautifulSoup(html, "lxml")
     
     # WebMCP navigator.modelContext detection
     webmcp = "navigator.modelContext" in html
     
     # MCP Manifests (JSON tool definitions)
-    mcp_manifests = soup.find_all("script", {"type": "application/mcp+json"})
+    mcp_manifests = len(soup.find_all("script", {"type": "application/mcp+json"}))
     
-    # CORS headers for agent calls (check via HEAD request)
-    cors_ready = False
-    
-    # Agent function keywords
-    agent_functions = len(re.findall(r"(get_|check_|find_|book_|schedule_)", html, re.I))
+    # Agent function keywords (get_, check_, find_, etc.)
+    agent_functions = len(re.findall(r"\b(get_|check_|find_|book_|schedule_)", html, re.I))
     
     return {
         "webmcp_ready": webmcp,
-        "mcp_manifests": len(mcp_manifests),
-        "agent_functions": agent_functions,
-        "cors_ready": cors_ready
+        "mcp_manifests": mcp_manifests,
+        "agent_functions": agent_functions
     }
 
 # ------------------------------------------------------------
-# ENHANCED SCORING v3 (MCP + GEO + Agentic)
+# SCORING MODEL v4 (GEO + MCP + Agentic)
 # ------------------------------------------------------------
 
+def compute_score(types, signals, status):
+    """Base pharma E-E-A-T scoring"""
+    schema_diversity = min(len(types) * 3, 30)
+    entity_coverage = 0
+    important_entities = ["Drug", "MedicalCondition", "MedicalWebPage", "FAQPage", "MedicalTrial"]
+    entity_coverage = sum(5 for e in important_entities if e in types)
+    entity_coverage = min(entity_coverage, 20)
+    
+    trust = 0
+    trust += 10 if signals["reviewed"] else 0
+    trust += 10 if signals["pi"] else 0
+    trust += 5 if signals["medguide"] else 0
+    
+    evidence = 0
+    evidence += 10 if signals["pubmed"] else 0
+    evidence += 10 if signals["doi"] else 0
+    evidence += 5 if signals["references"] else 0
+    
+    compliance = 10 if signals["adverse"] else 0
+    crawl = 10 if status == 200 else 0
+    
+    total = schema_diversity + entity_coverage + trust + evidence + compliance + crawl
+    return min(total, 100), {
+        "schema_diversity": schema_diversity,
+        "entity_coverage": entity_coverage,
+        "trust": trust,
+        "evidence": evidence,
+        "compliance": compliance,
+        "crawl": crawl
+    }
+
 def compute_mcp_geo_score(types, signals, mcp_signals, status):
-    base_score = compute_score(types, signals, status)[0]  # Your existing score
+    """Full MCP/GEO score with agent handshake bonuses"""
+    base_score, base_breakdown = compute_score(types, signals, status)
     
     # MCP/Agent bonuses
     mcp_bonus = min(mcp_signals["mcp_manifests"] * 15, 30)
@@ -90,32 +173,41 @@ def compute_mcp_geo_score(types, signals, mcp_signals, status):
     
     total = base_score + mcp_bonus + agent_bonus + webmcp_bonus
     return min(total, 100), {
-        **compute_score(types, signals, status)[1],  # Existing breakdown
+        **base_breakdown,
         "mcp_bonus": mcp_bonus,
         "agent_bonus": agent_bonus,
         "webmcp_bonus": webmcp_bonus
     }
 
+def entity_authority_index(types):
+    """Medical entity authority scoring"""
+    score = 0
+    medical_entities = ["Drug", "MedicalCondition", "MedicalTherapy", "MedicalTrial", "FAQPage"]
+    score += sum(20 for e in medical_entities if e in types)
+    if len(types) > 5:
+        score += 20
+    return min(score, 100)
+
 # ------------------------------------------------------------
-# XOLAIR PAGE OPTIMIZER
+# GENERIC PHARMA MCP TOOLS
 # ------------------------------------------------------------
 
 PHARMA_MCP_TOOLS = {
     "get_trial_eligibility": {
         "name": "get_trial_eligibility",
-        "description": "Check patient eligibility for Xolair clinical trials by age, condition, insurance",
+        "description": "Check patient eligibility for clinical trials by age, condition, location",
         "parameters": {
             "type": "object",
             "properties": {
                 "age": {"type": "number"},
-                "condition": {"type": "string", "enum": ["asthma", "hives", "food_allergy"]},
+                "condition": {"type": "string"},
                 "zip_code": {"type": "string"}
             }
         }
     },
     "check_coverage": {
-        "name": "check_coverage", 
-        "description": "Verify insurance coverage for Xolair by NDC, plan, pharmacy",
+        "name": "check_coverage",
+        "description": "Verify insurance/pharmacy coverage by NDC, plan, location",
         "parameters": {
             "type": "object",
             "properties": {
@@ -127,29 +219,41 @@ PHARMA_MCP_TOOLS = {
     },
     "get_dosing_schedule": {
         "name": "get_dosing_schedule",
-        "description": "Return Xolair dosing by weight, condition, administration route",
+        "description": "Return dosing schedule by patient weight, condition, administration route",
         "parameters": {
-            "type": "object", 
+            "type": "object",
             "properties": {
                 "patient_weight_kg": {"type": "number"},
                 "condition": {"type": "string"}
             }
         }
+    },
+    "find_specialists": {
+        "name": "find_specialists",
+        "description": "Locate prescribing specialists by condition, location, insurance",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "condition": {"type": "string"},
+                "zip_code": {"type": "string"},
+                "insurance": {"type": "string"}
+            }
+        }
     }
 }
 
-def generate_xolair_mcp_manifest(urls):
-    """Generate pharma-specific MCP manifest for Xolair"""
+def generate_pharma_mcp_manifest(target_urls, brand_name="Pharma Brand"):
+    """Generate generic pharma MCP manifest"""
     manifest = {
         "@context": ["https://schema.org", "https://modelcontext.org"],
         "@type": "MedicalWebPage",
-        "name": "Xolair Agentic MCP Manifest",
-        "url": "https://www.xolair.com",
+        "name": f"{brand_name} Agentic MCP Manifest",
         "mcpTools": list(PHARMA_MCP_TOOLS.values()),
         "optimizedPages": [
-            {"url": urls[0], "primaryTool": "get_trial_eligibility"},
-            {"url": urls[1], "primaryTool": "get_dosing_schedule"}, 
-            {"url": urls[2], "primaryTool": "check_coverage"}
+            {
+                "url": target_urls[i] if i < len(target_urls) else "",
+                "primaryTool": list(PHARMA_MCP_TOOLS.keys())[i % len(PHARMA_MCP_TOOLS)]
+            } for i in range(min(3, len(target_urls)))
         ],
         "policy": {
             "hipaaCompliant": True,
@@ -159,16 +263,16 @@ def generate_xolair_mcp_manifest(urls):
     }
     return manifest
 
-def generate_geo_schema(url, tool_name):
+def generate_geo_schema(url, tool_name, brand_name="Pharma Brand"):
     """Generate GEO-optimized schema for specific page"""
     return {
         "@context": "https://schema.org",
         "@type": "MedicalWebPage",
         "url": url,
-        "name": f"Xolair {tool_name.replace('_', ' ').title()}",
+        "name": f"{brand_name} {tool_name.replace('_', ' ').title()}",
         "reviewedBy": {
             "@type": "MedicalProfessional",
-            "name": "Xolair Medical Team"
+            "name": f"{brand_name} Medical Team"
         },
         "mcpTool": PHARMA_MCP_TOOLS[tool_name]
     }
@@ -177,162 +281,22 @@ def generate_geo_schema(url, tool_name):
 # DOWNLOAD PACKAGE
 # ------------------------------------------------------------
 
-def create_download_package(target_urls):
+def create_download_package(target_urls, brand_name="Pharma Brand"):
+    """Create complete MCP/GEO deployment package"""
     zip_buffer = io.BytesIO()
     
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-        # MCP Manifest
-        manifest = generate_xolair_mcp_manifest(target_urls)
-        zip_file.writestr("xolair-mcp-manifest.json", json.dumps(manifest, indent=2))
+        # Main MCP Manifest
+        manifest = generate_pharma_mcp_manifest(target_urls, brand_name)
+        zip_file.writestr("mcp-manifest.json", json.dumps(manifest, indent=2))
         
         # Page-specific schemas
-        for i, url in enumerate(target_urls):
-            tool = ["get_trial_eligibility", "get_dosing_schedule", "check_coverage"][i]
-            schema = generate_geo_schema(url, tool)
-            zip_file.writestr(f"xolair-{tool}-schema.json", json.dumps(schema, indent=2))
+        for i, url in enumerate(target_urls[:3]):
+            tool_name = list(PHARMA_MCP_TOOLS.keys())[i]
+            schema = generate_geo_schema(url, tool_name, brand_name)
+            zip_file.writestr(f"{tool_name}-schema.json", json.dumps(schema, indent=2))
         
         # Deployment guide
-        guide = """XOLAIR MCP/GEO DEPLOYMENT GUIDE
+        guide = f"""PHARMA MCP/GEO DEPLOYMENT GUIDE - {brand_name}
 
-1. Add MCP Manifest to <head>:
-<script type="application/mcp+json">
-""" + json.dumps(generate_xolair_mcp_manifest(target_urls), indent=2) + """
-</script>
-
-2. Enable CORS for agent calls:
-Access-Control-Allow-Origin: *
-Access-Control-Allow-Methods: POST, OPTIONS
-Access-Control-Allow-Headers: Content-Type
-
-3. Add WebMCP polyfill for Chrome 146+ agent support
-"""
-        zip_file.writestr("DEPLOYMENT.md", guide)
-    
-    zip_buffer.seek(0)
-    return zip_buffer.getvalue()
-
-# ------------------------------------------------------------
-# STREAMLIT APP v3 - FULL GEO/MCP OPTIMIZER
-# ------------------------------------------------------------
-
-st.set_page_config(layout="wide", page_title="Xolair MCP/GEO Optimizer")
-st.title("🚀 Xolair MCP/GEO Intelligence Engine v3")
-st.markdown("**Competitor MCP Audit → Agent Handshake Optimization → Citation Impact Prediction**")
-
-# Sidebar with Xolair presets
-with st.sidebar:
-    st.markdown("### 🔗 Xolair Presets")
-    
-    domains_input = st.text_area(
-        "Competitor Domains", 
-        value="\n".join(XOLAIR_COMPETITORS),
-        height=150
-    )
-    
-    st.markdown("### 🎯 Target URLs")
-    target_urls = st.text_area(
-        "Xolair Pages to Optimize",
-        value="\n".join(XOLAIR_URLS),
-        height=120
-    ).split("\n")
-    target_urls = [u.strip() for u in target_urls if u.strip()]
-    
-    use_js = st.checkbox("Enable JS Rendering (Playwright)", value=False)
-    run = st.button("🚀 Run Full MCP/GEO Analysis", type="primary")
-
-if run and len(target_urls) >= 3:
-    domains = [d.strip() for d in domains_input.split("\n") if d.strip()]
-    results = []
-    
-    # Competitor analysis
-    for domain in domains:
-        url = domain if domain.startswith("http") else f"https://{domain}"
-        html, status = fetch_page(url, use_js)
-        
-        jsonld = extract_jsonld(html)
-        types = flatten_types(jsonld)
-        signals = extract_signals(html)
-        mcp_signals = detect_mcp_signals(html)
-        
-        score, breakdown = compute_mcp_geo_score(types, signals, mcp_signals, status)
-        eai = entity_authority_index(types)
-        
-        results.append({
-            "Domain": domain,
-            "MCP/GEO Score": f"{score}/100",
-            "Entity Authority": f"{eai}/100", 
-            "WebMCP Ready": "✅" if mcp_signals["webmcp_ready"] else "❌",
-            "Agent Functions": mcp_signals["agent_functions"],
-            "Schema Types": ", ".join(types[:5]) + ("..." if len(types) > 5 else ""),
-            **{k: breakdown[k] for k in breakdown}
-        })
-    
-    # Display results
-    df = pd.DataFrame(results)
-    st.subheader("📊 Competitor MCP/GEO Scorecard")
-    st.dataframe(df.style.highlight_max(axis=0), use_container_width=True)
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Xolair Current Score", f"{df['MCP/GEO Score'].str.extract('(\\d+)').astype(int).mean():.0f}/100")
-    with col2:
-        st.metric("Competitor Avg", f"{df['MCP/GEO Score'].str.extract('(\\d+)').astype(int).mean():.0f}/100")
-    with col3:
-        st.metric("Gap to Close", f"{20:.0f}pts")
-    
-    # GEO Impact Prediction
-    st.subheader("🎯 Predicted GEO Impact")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Citation Probability", "+47%", "+23%")
-    with col2:
-        st.metric("CTR Lift", "+35%", "+18%")
-    with col3:
-        st.metric("Agent Discoverability", "92%", "+51%")
-    
-    # Generated MCP Manifest
-    st.subheader("🔧 Generated Xolair MCP Manifest")
-    manifest = generate_xolair_mcp_manifest(target_urls)
-    st.code(json.dumps(manifest, indent=2), language="json")
-    
-    # Download package
-    st.subheader("📥 Deploy Package")
-    zip_data = create_download_package(target_urls)
-    st.download_button(
-        "Download MCP/GEO Deploy Kit (ZIP)",
-        zip_data,
-        "xolair-mcp-geo-deploy-kit.zip",
-        "application/zip"
-    )
-    
-    # Radar chart (your existing code - enhanced)
-    if not df.empty:
-        row = df.iloc[df['MCP/GEO Score'].str.extract('(\\d+)').astype(int).idxmax()]
-        categories = list(row[['schema_diversity', 'entity_coverage', 'trust', 'evidence', 'mcp_bonus', 'agent_bonus']].keys())
-        values = row[categories].tolist()
-        values += values[:1]
-        
-        angles = np.linspace(0, 2 * np.pi, len(categories), endpoint=False).tolist()
-        angles += angles[:1]
-        
-        fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(projection='polar'))
-        ax.plot(angles, values, 'o-', linewidth=2)
-        ax.fill(angles, values, alpha=0.25)
-        ax.set_xticks(angles[:-1])
-        ax.set_xticklabels(categories)
-        ax.grid(True)
-        plt.title("Top Competitor MCP Profile", size=16, y=1.1)
-        st.pyplot(fig)
-    
-    st.markdown("---")
-    st.markdown("""
-    **🚀 Next Steps:**
-    1. Deploy MCP manifest + CORS headers 
-    2. Test with Anthropic Claude agents
-    3. Monitor AI Overview citations
-    4. Expect +47% citation probability vs competitors
-    """)
-
-else:
-    st.info("👆 Enter at least 3 Xolair URLs and click **Run Full MCP/GEO Analysis**")
-    st.markdown("**Preset domains and Xolair URLs are pre-loaded for instant analysis**")
+1. Add MCP Manifest to <head> of all pages:
