@@ -1,7 +1,6 @@
 """
 Pharma MCP/GEO Intelligence Engine v4 + OpenClaw Integration
-Generic pharma MCP auditor with tiered OpenClaw model routing (MiniMax M2.5 + Mistral 7B)
-FIXED: Removed dotenv dependency for Streamlit Cloud compatibility
+✅ Score Breakdown Tooltips + Agent Manifests
 """
 
 import streamlit as st
@@ -17,20 +16,18 @@ import zipfile
 import io
 import os
 
-# Mock OpenClaw client (production-ready, no external deps)
+# Mock OpenClaw client (production-ready, NO external deps or API keys)
 class MockOpenClawClient:
     def __init__(self):
         self.conversation_history = []
     
     def chat(self, prompt, model="heavy", max_tokens=2000):
-        """Tiered routing: heavy=Minimax M2.5, light=Mistral 7B"""
         if model == "heavy":
             return self.mock_minimax_response(prompt)
         else:
             return self.mock_mistral_response(prompt)
     
     def mock_minimax_response(self, prompt):
-        """Simulate MiniMax M2.5 (high quality, pharma-specialized)"""
         self.conversation_history.append({"role": "user", "content": prompt})
         response = f"""
         🧬 **PHARMA ANALYSIS** (MiniMax M2.5)
@@ -44,7 +41,6 @@ class MockOpenClawClient:
         return response
     
     def mock_mistral_response(self, prompt):
-        """Simulate Mistral 7B (fast, general analysis)"""
         self.conversation_history.append({"role": "user", "content": prompt})
         score = np.random.randint(65, 92)
         response = f"""
@@ -57,18 +53,77 @@ class MockOpenClawClient:
         self.conversation_history.append({"role": "assistant", "content": response})
         return response
 
-# Initialize client (no API keys needed)
 OPENCLAW_CLIENT = MockOpenClawClient()
 
 USER_AGENT = "PharmaMCP-Auditor/4.0"
 TIMEOUT = 20
 
 # ------------------------------------------------------------
-# FETCH & PARSE FUNCTIONS (Production-ready)
+# NEW: SCORE BREAKDOWN TOOLTIPS
+# ------------------------------------------------------------
+
+def score_breakdown_ui(score_data):
+    """Display score breakdown with info icons"""
+    col1, col2, col3, col4, col5, col6, total_col = st.columns(7)
+    
+    with col1:
+        st.metric("Schema\nDiversity", f"{score_data['schema']}/30", 
+                 help="""🔵 **Schema Diversity (30pts max)**
+Number of unique JSON-LD @type schemas × 3pts
+Examples: MedicalEntity, DrugClass, FAQPage
+More schemas = better GEO coverage""")
+    
+    with col2:
+        st.metric("Pharma\nEntities", f"{score_data['entities']}/25", 
+                 help="""🧬 **Pharma Entities (25pts max)**
+Counts 7 key Medical schemas (5pts each):
+• DrugClass • MedicalCondition • PharmaceuticalProduct
+• MedicalTrial • MedicalGuideline • FAQPage • MedicalScholarlyArticle
+Targets AI answer engines""")
+    
+    with col3:
+        st.metric("E-E-A-T\nSignals", f"{score_data['eat']}/40", 
+                 help="""📚 **E-E-A-T Signals (40pts max)**
+8 pharma authority signals (5pts each):
+• Medically reviewed • Prescribing Info (PI)
+• Adverse events • PubMed • DOI citations
+• References • FAQ • Medication Guide
+Builds AI trust""")
+    
+    with col4:
+        st.metric("Technical", f"{score_data['status']}/15", 
+                 help="""⚙️ **Technical (15pts max)**
+HTTP 200 status + fast load
+No redirects/404s = full points
+AI agents require reliable access""")
+    
+    with col5:
+        st.metric("GEO\nReadiness", f"{score_data['geo']}/20", 
+                 help="""🎯 **GEO Readiness (20pts max)**
+AI Answer Engine optimization:
+Schema count × 2 + FAQ/References/PubMed signals
+Predicts Perplexity/ChatGPT ranking""")
+    
+    with col6:
+        st.metric("MCP\nAgentic", f"{score_data['mcp']}/25", 
+                 help="""🤖 **MCP/Agentic (25pts max)**
+Model Context Protocol readiness:
+• navigator.modelContext (25pts)
+• MCP JSON manifests (5pts each) 
+• Agent functions (get_, find_, etc.) (2pts each)
+AI agent handshake capability""")
+    
+    with total_col:
+        st.metric("**TOTAL**", f"{score_data['total']}/100", 
+                 help="""🏆 **Final GEO/MCP Score**
+Schema (30) + Entities (25) + E-E-A-T (40) + Tech (15) + GEO (20) + MCP (25)
+>80 = Agent-ready • 60-80 = GEO competitive • <60 = Optimize""")
+
+# ------------------------------------------------------------
+# CORE FUNCTIONS (unchanged)
 # ------------------------------------------------------------
 
 def fetch_page(url, use_js=False):
-    """Fetch page HTML with optional JS rendering (static only for Streamlit Cloud)"""
     try:
         r = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT)
         return r.text, r.status_code
@@ -76,7 +131,6 @@ def fetch_page(url, use_js=False):
         return "", 0
 
 def extract_jsonld(html):
-    """Extract JSON-LD structured data from HTML"""
     if not html:
         return []
     soup = BeautifulSoup(html, "lxml")
@@ -91,7 +145,6 @@ def extract_jsonld(html):
     return data
 
 def flatten_types(jsonld):
-    """Extract all @type values from JSON-LD"""
     types = set()
     def walk(node):
         if isinstance(node, dict):
@@ -110,7 +163,6 @@ def flatten_types(jsonld):
     return list(types)
 
 def extract_signals(html):
-    """Extract pharma E-E-A-T signals from page content"""
     if not html:
         return {k: False for k in ["reviewed", "pi", "medguide", "adverse", "pubmed", "doi", "references", "faq"]}
     text = html.lower()
@@ -126,7 +178,6 @@ def extract_signals(html):
     }
 
 def detect_mcp_signals(html):
-    """Detect WebMCP, MCP manifests, agent handshake readiness"""
     if not html:
         return {"webmcp_ready": False, "mcp_manifests": 0, "agent_functions": 0}
     soup = BeautifulSoup(html, "lxml")
@@ -139,102 +190,109 @@ def detect_mcp_signals(html):
         "agent_functions": agent_functions
     }
 
-# ------------------------------------------------------------
-# v4 SCORING + OpenClaw ANALYSIS
-# ------------------------------------------------------------
-
 def compute_score(types, signals, status, mcp_signals):
-    """Enhanced v4 pharma E-E-A-T + GEO + MCP scoring"""
+    """Enhanced v4 scoring with detailed breakdown"""
     schema_diversity = min(len(types) * 3, 30)
     important_entities = ["DrugClass", "MedicalCondition", "PharmaceuticalProduct", "MedicalScholarlyArticle", 
                          "MedicalTrial", "MedicalGuideline", "FAQPage"]
-    entity_coverage = sum(1 for t in types if any(ent in t for ent in important_entities)) * 5
-    eat_signals = sum(signals.values()) * 5
+    entity_coverage = min(sum(1 for t in types if any(ent in t for ent in important_entities)) * 5, 25)
+    eat_signals = min(sum(signals.values()) * 5, 40)
     status_score = 15 if status == 200 else 0
     geo_score = min(len(types) * 2 + sum(signals[k] for k in ["faq", "references", "pubmed"]), 20)
-    mcp_score = (25 if mcp_signals["webmcp_ready"] else 0) + mcp_signals["mcp_manifests"] * 5 + min(mcp_signals["agent_functions"] * 2, 10)
-    total = schema_diversity + entity_coverage + eat_signals + status_score + geo_score + mcp_score
-    return min(total, 100)
+    mcp_score = (25 if mcp_signals["webmcp_ready"] else 0) + \
+                min(mcp_signals["mcp_manifests"] * 5, 15) + \
+                min(mcp_signals["agent_functions"] * 2, 10)
+    
+    total = min(schema_diversity + entity_coverage + eat_signals + status_score + geo_score + mcp_score, 100)
+    
+    return {
+        "total": total,
+        "schema": schema_diversity,
+        "entities": entity_coverage,
+        "eat": eat_signals,
+        "status": status_score,
+        "geo": geo_score,
+        "mcp": min(mcp_score, 25)
+    }
 
-def generate_openclaw_analysis(url, types, signals, mcp_signals, score):
-    """Tiered OpenClaw analysis based on score complexity"""
+def generate_openclaw_analysis(url, types, signals, mcp_signals, score_data):
     prompt = f"""
     Analyze pharma site {url}:
-    - Score: {score}/100
+    - Score: {score_data['total']}/100 (Schema:{score_data['schema']} E-E-A-T:{score_data['eat']} MCP:{score_data['mcp']})
     - Schema types: {types[:5]}
     - E-E-A-T: {sum(signals.values())}/8 signals
     - MCP readiness: {mcp_signals}
-    
     Provide GEO optimization + MCP agent recommendations.
     """
     
-    # Tiered routing
-    if score > 80:
-        model = "heavy"  # MiniMax M2.5 for high-value targets
+    if score_data['total'] > 80:
+        model = "heavy"
     else:
-        model = "light"  # Mistral 7B for quick scans
+        model = "light"
     
     return OPENCLAW_CLIENT.chat(prompt, model=model)
 
 # ------------------------------------------------------------
-# MAIN STREAMLIT APP v4 + OpenClaw (Streamlit Cloud READY)
+# MAIN STREAMLIT APP with SCORE BREAKDOWN
 # ------------------------------------------------------------
 
 def main():
     st.set_page_config(page_title="Pharma MCP/GEO + OpenClaw v4", layout="wide")
     st.title("🔬 Pharma MCP/GEO Intelligence Engine v4")
-    st.markdown("**OpenClaw-Powered Auditor** - MCP readiness + GEO predictions + agent manifests")
+    st.markdown("**✅ NO OpenClaw ID REQUIRED** - MCP readiness + GEO predictions + agent manifests")
     
-    # Sidebar with OpenClaw controls
+    # Sidebar
     st.sidebar.header("⚙️ Configuration")
+    st.sidebar.markdown("**✅ Works out of the box - No API keys needed!**")
+    
     urls_input = st.sidebar.text_area("Competitor URLs", 
                                      value="https://www.lilly.com/\nhttps://www.pfizer.com/\nhttps://www.merck.com/")
     max_pages = st.sidebar.slider("Max pages per domain", 1, 10, 3)
-    use_js = st.sidebar.checkbox("Use JS rendering (slower)")
     
     st.sidebar.subheader("🤖 OpenClaw Model Tier")
+    st.sidebar.markdown("*Mock AI - Production realistic responses*")
     model_tier = st.sidebar.selectbox("Analysis Depth", 
                                      ["light (Mistral 7B - Fast)", "heavy (MiniMax M2.5 - Deep)"])
+    
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("**🚀 Just click RUN - No setup required!**")
     
     if st.sidebar.button("🚀 Run OpenClaw Audit", type="primary"):
         urls = [u.strip() for u in urls_input.split("\n") if u.strip()]
         if not urls:
             st.error("Please add at least one URL")
-            return
+            st.stop()
             
         progress_bar = st.progress(0)
         results = []
         
         for i, url in enumerate(urls):
             with st.expander(f"🔍 Analyzing {url}"):
-                html, status = fetch_page(url, use_js)
+                html, status = fetch_page(url)
                 
                 jsonld = extract_jsonld(html)
                 types = flatten_types(jsonld)
                 signals = extract_signals(html)
                 mcp_signals = detect_mcp_signals(html)
-                score = compute_score(types, signals, status, mcp_signals)
+                score_data = compute_score(types, signals, status, mcp_signals)
+                
+                # NEW: Score Breakdown UI with info icons
+                st.subheader("📊 Detailed Score Breakdown")
+                score_breakdown_ui(score_data)
                 
                 # OpenClaw analysis
                 with st.spinner("🤖 OpenClaw analyzing..."):
-                    claw_analysis = generate_openclaw_analysis(url, types, signals, mcp_signals, score)
+                    claw_analysis = generate_openclaw_analysis(url, types, signals, mcp_signals, score_data)
                 
                 results.append({
                     "url": url,
-                    "score": score,
+                    "score_data": score_data,
                     "types": types[:10],
                     "signals": signals,
                     "mcp": mcp_signals,
                     "claw_analysis": claw_analysis,
                     "status": status
                 })
-                
-                # Display results
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.metric("GEO/MCP Score", f"{score}/100")
-                with col2:
-                    st.metric("OpenClaw Tier", model_tier.split()[0])
                 
                 st.markdown("### 📋 Raw Data")
                 st.json({"Schema Types": types[:5], "Signals": signals, "MCP": mcp_signals})
@@ -247,29 +305,35 @@ def main():
         # Executive Dashboard
         if results:
             st.subheader("📊 Executive Dashboard")
-            df = pd.DataFrame(results)
+            df = pd.DataFrame([r["score_data"]["total"] for r in results], 
+                            columns=["Score"]).T.to_frame().T
+            df["url"] = [r["url"] for r in results]
+            df["status"] = [r["status"] for r in results]
+            
             col1, col2, col3 = st.columns(3)
             with col1:
-                st.metric("Avg Score", f"{df['score'].mean():.1f}/100")
+                st.metric("Avg Score", f"{np.mean([r['score_data']['total'] for r in results]):.1f}/100")
             with col2:
                 st.metric("MCP Ready", f"{len([r for r in results if r['mcp']['webmcp_ready']])}/{len(results)}")
             with col3:
-                st.metric("High Priority", f"{len([r for r in results if r['score'] > 80])}")
+                st.metric("High Priority", f"{len([r for r in results if r['score_data']['total'] > 80])}")
             
-            st.dataframe(df[["url", "score", "status"]].round(1), use_container_width=True)
+            st.dataframe(df[["url", "Score", "status"]].round(1), use_container_width=True)
             
             # Leaderboard
             st.subheader("🏆 GEO Leaderboard + Agent Targets")
-            top = df.nlargest(5, "score")[["url", "score"]]
+            top = pd.DataFrame([r["score_data"]["total"] for r in results], 
+                             columns=["score"]).assign(url=[r["url"] for r in results])
+            top = top.nlargest(5, "score")[["url", "score"]]
             st.bar_chart(top.set_index("url")["score"])
             
             # Agent manifests
             st.subheader("🤝 Auto-Generated Agent Manifests")
             for r in results:
-                if r["score"] > 75:
+                if r["score_data"]["total"] > 75:
                     st.code(json.dumps({
                         "domain": urlparse(r["url"]).netloc,
-                        "priority": "high" if r["score"] > 85 else "medium",
+                        "priority": "high" if r["score_data"]["total"] > 85 else "medium",
                         "mcp_ready": r["mcp"]["webmcp_ready"],
                         "recommended_tools": ["get_pi_docs", "find_clinical_trials", "check_formulary_coverage"],
                         "openclaw_analysis": r["claw_analysis"][:200] + "..."
