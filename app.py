@@ -18,16 +18,20 @@ from typing import Optional
 import time
 import hashlib
 
-# PDF export
-from reportlab.lib.pagesizes import A4
-from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import mm
-from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
-    HRFlowable, KeepTogether
-)
-from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
+# PDF export — optional dependency
+try:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors as rl_colors
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import (
+        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
+        HRFlowable, KeepTogether,
+    )
+    from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
+    REPORTLAB_AVAILABLE = True
+except ImportError:
+    REPORTLAB_AVAILABLE = False
 
 # ============================================================================
 # PAGE CONFIG
@@ -622,6 +626,9 @@ def parallel_scan(urls: list[str], multi_page: bool = True) -> list[ScanResult]:
 # ============================================================================
 
 def build_pdf_report(results: list[ScanResult], client_name: str) -> bytes:
+    if not REPORTLAB_AVAILABLE:
+        raise RuntimeError("reportlab is not installed")
+    colors = rl_colors  # local alias
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
         buf, pagesize=A4,
@@ -1413,7 +1420,13 @@ def main():
                 )
 
             with col_pdf:
-                if st.button("📄 Generate PDF Report", use_container_width=True):
+                if not REPORTLAB_AVAILABLE:
+                    st.markdown(
+                        '<div class="err-card" style="background:var(--amber-dim);border-color:var(--amber-border);color:var(--amber);">'
+                        '⚠️ PDF export requires <code>reportlab</code>. Add it to <code>requirements.txt</code>.</div>',
+                        unsafe_allow_html=True,
+                    )
+                elif st.button("📄 Generate PDF Report", use_container_width=True):
                     with st.spinner("Building executive PDF…"):
                         pdf_bytes = build_pdf_report(all_results, client_name)
                     st.download_button(
