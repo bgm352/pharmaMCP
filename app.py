@@ -1,6 +1,6 @@
 """
 Pharma MCP/GEO Intelligence Engine v4 + OpenClaw Integration
-✅ Score Breakdown Tooltips + Agent Manifests
+✅ FIXED Pandas Error + Score Breakdown Tooltips
 """
 
 import streamlit as st
@@ -59,7 +59,7 @@ USER_AGENT = "PharmaMCP-Auditor/4.0"
 TIMEOUT = 20
 
 # ------------------------------------------------------------
-# NEW: SCORE BREAKDOWN TOOLTIPS
+# SCORE BREAKDOWN TOOLTIPS (unchanged)
 # ------------------------------------------------------------
 
 def score_breakdown_ui(score_data):
@@ -233,7 +233,7 @@ def generate_openclaw_analysis(url, types, signals, mcp_signals, score_data):
     return OPENCLAW_CLIENT.chat(prompt, model=model)
 
 # ------------------------------------------------------------
-# MAIN STREAMLIT APP with SCORE BREAKDOWN
+# MAIN STREAMLIT APP - FIXED PANDAS ERROR
 # ------------------------------------------------------------
 
 def main():
@@ -302,13 +302,20 @@ def main():
             
             progress_bar.progress((i + 1) / len(urls))
         
-        # Executive Dashboard
+        # FIXED: Executive Dashboard - Simple pandas creation
         if results:
             st.subheader("📊 Executive Dashboard")
-            df = pd.DataFrame([r["score_data"]["total"] for r in results], 
-                            columns=["Score"]).T.to_frame().T
-            df["url"] = [r["url"] for r in results]
-            df["status"] = [r["status"] for r in results]
+            
+            # Create summary data properly
+            summary_data = []
+            for r in results:
+                summary_data.append({
+                    "URL": r["url"],
+                    "Score": r["score_data"]["total"],
+                    "Status": r["status"]
+                })
+            
+            df = pd.DataFrame(summary_data)
             
             col1, col2, col3 = st.columns(3)
             with col1:
@@ -318,14 +325,15 @@ def main():
             with col3:
                 st.metric("High Priority", f"{len([r for r in results if r['score_data']['total'] > 80])}")
             
-            st.dataframe(df[["url", "Score", "status"]].round(1), use_container_width=True)
+            st.dataframe(df.round(1), use_container_width=True)
             
-            # Leaderboard
+            # FIXED: Leaderboard
             st.subheader("🏆 GEO Leaderboard + Agent Targets")
-            top = pd.DataFrame([r["score_data"]["total"] for r in results], 
-                             columns=["score"]).assign(url=[r["url"] for r in results])
-            top = top.nlargest(5, "score")[["url", "score"]]
-            st.bar_chart(top.set_index("url")["score"])
+            leaderboard_data = []
+            for r in results:
+                leaderboard_data.append({"url": r["url"], "score": r["score_data"]["total"]})
+            top_df = pd.DataFrame(leaderboard_data).nlargest(5, "score")
+            st.bar_chart(top_df.set_index("url")["score"])
             
             # Agent manifests
             st.subheader("🤝 Auto-Generated Agent Manifests")
@@ -341,4 +349,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
