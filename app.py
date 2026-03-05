@@ -4,10 +4,6 @@ Pharma MCP Agent Readiness Auditor
 The question this app answers:
   "Can an AI agent actually USE this pharma website as an MCP tool?"
 
-Not a SEO tool. Not a GEO tool.
-A protocol-level audit: does this site expose the structured endpoints,
-callable functions, machine-readable data, and agent manifests that
-AI systems need to query it in real-time?
 """
 
 import streamlit as st
